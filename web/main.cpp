@@ -12,7 +12,13 @@
 #include <set>
 #include <string>
 
+#include <ft2build.h>
+#include FT_FREETYPE_H
+
 #include "global/io/buffer.h"
+#include "modularity/ioc.h"
+#include "types/fontstypes.h"
+#include "ifontsdatabase.h"
 #include "thirdparty/kors_logger/src/logger.h"
 #include "log.h"
 
@@ -82,10 +88,69 @@ void init(int, char**)
 }
 
 EMSCRIPTEN_KEEPALIVE
-bool addFont(const char*)
+bool addFont(const char* fontPath)
 {
-    // extra font loading (CJK) is not supported by the Qt-free build yet
-    return false;
+    // Extra fonts (webmscore's CJK path): register the file as a Text
+    // substitution so FontsEngine falls back to it for glyphs the score
+    // fonts lack. The only public route that also feeds the substitution
+    // list is IFontsDatabase::addAdditionalFonts(dir), which reads a
+    // fontslist.json manifest — so write a one-entry manifest next to the
+    // font and point it there. Family name and style come from FreeType.
+    if (!s_inited || !fontPath || !*fontPath) {
+        return false;
+    }
+
+    static FT_Library ftlib = nullptr;
+    if (!ftlib && FT_Init_FreeType(&ftlib) != 0) {
+        return false;
+    }
+
+    FT_Face ftface = nullptr;
+    if (FT_New_Face(ftlib, fontPath, 0, &ftface) != 0) {
+        LOGE() << "addFont: FreeType cannot read " << fontPath;
+        return false;
+    }
+    std::string family = ftface->family_name ? ftface->family_name : "";
+    bool bold = (ftface->style_flags & FT_STYLE_FLAG_BOLD) != 0;
+    bool italic = (ftface->style_flags & FT_STYLE_FLAG_ITALIC) != 0;
+    FT_Done_Face(ftface);
+    if (family.empty()) {
+        LOGE() << "addFont: font has no family name: " << fontPath;
+        return false;
+    }
+
+    std::string path(fontPath);
+    size_t slash = path.find_last_of('/');
+    std::string dir = (slash == std::string::npos) ? std::string(".") : path.substr(0, slash);
+    std::string file = (slash == std::string::npos) ? path : path.substr(slash + 1);
+
+    // Minimal JSON escaping — family names carry letters/digits/spaces, but
+    // a quote or backslash must not break the manifest.
+    auto escape = [](const std::string& s) {
+        std::string out;
+        for (char c : s) {
+            if (c == '"' || c == '\\') {
+                out += '\\';
+            }
+            out += c;
+        }
+        return out;
+    };
+
+    {
+        std::ofstream manifest(dir + "/fontslist.json", std::ios::trunc);
+        manifest << "[{\"file\":\"" << escape(file) << "\",\"family\":\"" << escape(family)
+                 << "\",\"bold\":" << (bold ? "true" : "false")
+                 << ",\"italic\":" << (italic ? "true" : "false") << "}]";
+        if (!manifest) {
+            return false;
+        }
+    }
+
+    muse::modularity::globalIoc()
+        ->resolve<muse::draw::IFontsDatabase>("scoreview-engine")
+        ->addAdditionalFonts(muse::io::path_t(dir));
+    return true;
 }
 
 EMSCRIPTEN_KEEPALIVE

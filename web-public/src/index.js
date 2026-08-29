@@ -94,7 +94,7 @@ class WebMscore {
      * Load score data
      * @param {'mscz' | 'mscx'} format
      * @param {Uint8Array} data
-     * @param {Uint8Array[] | Promise<Uint8Array[]>} fonts NOT SUPPORTED — pass `[]`
+     * @param {Uint8Array[] | Promise<Uint8Array[]>} fonts load extra font files (CJK characters support)
      * @param {boolean} doLayout set to false if you only need the score metadata or the midi file
      * @returns {Promise<WebMscore>}
      */
@@ -104,8 +104,8 @@ class WebMscore {
             WebMscore.ready
         ])
 
-        if (_fonts && _fonts.length > 0) {
-            throw new NotSupportedError('loading extra fonts')
+        for (const f of _fonts) {
+            await WebMscore.addFont(f)
         }
 
         const fileformatptr = getStrPtr(format)
@@ -131,13 +131,28 @@ class WebMscore {
     }
 
     /**
-     * NOT SUPPORTED — extra font loading (CJK) needs the Qt build
+     * Load (CJK) fonts on demand — registered as text-substitution fonts,
+     * so glyphs the score fonts lack fall back to them
      * @private
      * @param {string | Uint8Array} font
-     * @returns {Promise<boolean>}
+     *        * path to the font file in the virtual file system, or
+     *        * the font file data
+     * @returns {Promise<boolean>} success
      */
-    static async addFont(font) {  // eslint-disable-line no-unused-vars
-        throw new NotSupportedError('addFont')
+    static async addFont(font) {
+        if (typeof font !== 'string') {
+            const name = 'font-' + Math.random()  // a random name
+            // save the font data to the virtual file system. /tmp, not
+            // /fonts as in webmscore: this build preloads its resources
+            // under /resources and has no /fonts directory.
+            Module['FS_createDataFile']('/tmp/', name, font, true, true)
+            font = '/tmp/' + name
+        }
+
+        const fontpathptr = getStrPtr(font)
+        const success = Module.ccall('addFont', 'number', ['number'], [fontpathptr])
+        freePtr(fontpathptr)
+        return !!success
     }
 
     /**
