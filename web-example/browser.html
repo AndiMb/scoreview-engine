@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>scoreview-engine browser smoke test</title>
+<style>
+    body { font-family: system-ui, sans-serif; margin: 24px; }
+    #status { font-family: monospace; white-space: pre-wrap; background: #f4f4f4; padding: 12px; }
+    #sheet svg { max-width: 100%; height: auto; border: 1px solid #ccc; }
+</style>
+</head>
+<body>
+<h1>scoreview-engine — browser smoke test</h1>
+<p>Loads a score twice: on the main thread (<code>scoreview.mjs</code>) and
+through the worker bundle (<code>scoreview.js</code>), then renders the SVG below.
+Serve the repository root over HTTP and open
+<code>/web-example/browser.html</code>.</p>
+<div id="status">running…</div>
+<div id="sheet"></div>
+
+<!-- worker bundle: IIFE, defines the global WebMscore (worker proxy) -->
+<script src="../web-public/scoreview.js"></script>
+
+<script type="module">
+// main-thread bundle: tell the emscripten glue where the .lib files live,
+// because a module script has no document.currentScript to derive it from
+window.MSCORE_SCRIPT_URL = new URL('../web-public/', location.href).href
+
+const results = { mainThread: {}, worker: {}, errors: [] }
+const statusEl = document.getElementById('status')
+const log = () => { statusEl.textContent = JSON.stringify(results, null, 2) }
+
+try {
+    const { default: WebMscoreMain } = await import('../web-public/scoreview.mjs')
+    const data = new Uint8Array(await (await fetch('../musescore/vtest/scores/volta-1.mscz')).arrayBuffer())
+
+    // --- main thread ---
+    {
+        const score = await WebMscoreMain.load('mscz', data.slice(), [], true)
+        const svg = await score.saveSvg(0, false)
+        const midi = await score.saveMidi(true, true)
+        const meta = JSON.parse(await score.saveMetadata())
+        results.mainThread = {
+            pages: await score.npages(),
+            midiBytes: midi.length,
+            svgBytes: new TextEncoder().encode(svg).length,
+            duration: meta.duration,
+        }
+        try { await score.savePdf() } catch (e) { results.mainThread.savePdfThrows = e.name }
+        document.getElementById('sheet').innerHTML = svg
+        score.destroy()
+    }
+    log()
+
+    // --- worker (global from scoreview.js) ---
+    {
+        const score = await WebMscore.load('mscz', data.slice(), [], true)
+        const svg = await score.saveSvg(0, false)
+        const midi = await score.saveMidi(true, true)
+        const meta = JSON.parse(await score.saveMetadata())
+        results.worker = {
+            pages: await score.npages(),
+            midiBytes: midi.length,
+            svgBytes: new TextEncoder().encode(svg).length,
+            duration: meta.duration,
+        }
+        score.destroy()
+    }
+} catch (err) {
+    results.errors.push(String(err && err.stack || err))
+}
+
+log()
+window.__done = true
+</script>
+</body>
+</html>
