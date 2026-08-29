@@ -90,6 +90,9 @@ set(FONTSTACK_SRC
 add_library(sve_engine STATIC
     src/config/engravinginit.cpp
     src/shadow/engravingfontsprovider.cpp
+    src/shadow/midifile.cpp
+    src/shadow/exportmidi.cpp
+    src/positions/positionswriter.cpp
     ${MU_ROOT}/src/engraving/internal/engravingfont.cpp
     ${FONTSTACK_SRC}
 )

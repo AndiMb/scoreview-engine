@@ -1,2 +1,7 @@
 90a9561efee05b655eeae83139ea697f6c7e62f0 src/engraving/internal/engravingfontsprovider.cpp
 7d9bf3d93f3ec5bde61b38319eba3396387e1e06 src/framework/draw/internal/fontsengine.cpp
+094156cff9d59b213beaac18b2d17407c6ee5922 src/importexport/midi/internal/midiexport/exportmidi.h
+732044cdb82f44e78a45710af17fc8c64e95f91b src/importexport/midi/internal/midiexport/exportmidi.cpp
+e5423e4b7ab02cb0e0f27b99f2ff2b123836e438 src/importexport/midi/internal/midishared/midifile.h
+7a066db1418c5496d20b3ac2aeac630e78edea60 src/importexport/midi/internal/midishared/midifile.cpp
+e2cfe85c044ae6ef1ed0d068dd5ec905b36fbdb7 src/importexport/midi/internal/midishared/midievent.h

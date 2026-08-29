@@ -14,6 +14,8 @@ Current shadow copies:
 | File here | Upstream counterpart | Diff |
 |---|---|---|
 | `engravingfontsprovider.cpp` | `src/engraving/internal/engravingfontsprovider.cpp` | one line: `dirpath(filePath)` instead of `dirpath(filePath.toQString())` |
+| `midifile.h` / `midifile.cpp` | `src/importexport/midi/internal/midishared/midifile.{h,cpp}` | `QIODevice` → `muse::io::IODevice`, `qint64` → `int64_t`, `putChar` → `put`; the MIDI *import* path is not carried over; supplies Qt's `uchar` typedef for `midievent.h` (included unmodified, pinned) |
+| `exportmidi.h` / `exportmidi.cpp` | `src/importexport/midi/internal/midiexport/exportmidi.{h,cpp}` | `QIODevice` → `muse::io::IODevice`, `QString`/`QFile` overloads dropped, `qPrintable` → `muse::String` |
 
 ## Drift guard
 
