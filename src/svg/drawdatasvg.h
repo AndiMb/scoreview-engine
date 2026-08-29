@@ -5,7 +5,7 @@
 // is shaped through the same FontsEngine the layout measured with
 // (shadow fontsengine's glyphRuns), every distinct glyph is emitted once as
 // a <path> in <defs> and placed with <use> — self-contained SVG, no font
-// delivery (the Phase-0 decision).
+// delivery to the consumer.
 
 #include <string>
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Rendered-pixel spot check between two directories of SVGs.
 
-The Phase-3 acceptance instrument: compares same-named SVGs from a reference
+The SVG acceptance instrument: compares same-named SVGs from a reference
 generator (the released Qt webmscore) and a candidate (mscz2media --svg) by
 (a) exact viewBox equality and (b) pixel statistics of both files rendered
 with the same headless Chromium at the same width.

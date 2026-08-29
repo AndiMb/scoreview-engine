@@ -57,7 +57,7 @@ jobs:
           name: corpus-native
           path: build/corpus-native.json
 
-  # Phase-5 gate: the wasm build must reproduce the native fingerprints
+  # The wasm gate: the wasm build must reproduce the native fingerprints
   # exactly (same loader, same writers — any diff is a wasm-side bug).
   wasm:
     runs-on: ubuntu-22.04

@@ -1,7 +1,7 @@
 #include "scoreloader.h"
 
 // The read + layout dance is ScoreRW::readScore (the submodule's test util)
-// with the Phase-4 Score::update() pass appended; kept in step with it so a
+// with the Score::update() pass appended; kept in step with it so a
 // submodule bump that changes the loading sequence shows up as a corpus diff,
 // not as silent drift between the CLI and the wasm build.
 

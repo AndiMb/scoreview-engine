@@ -3,7 +3,7 @@
  * Convert a corpus of scores with the wasm build under Node and fingerprint
  * every output — the wasm twin of corpus-native.py, same report shape.
  *
- * Phase-5 acceptance: this report must match the native build's exactly
+ * The wasm gate: this report must match the native build's exactly
  * (corpus-compare.py native.json node.json --exact-svg — no waivers, no
  * allowed metadata drift; both pipelines share sve::loadScore and the same
  * writers, so any difference is a wasm-side bug).

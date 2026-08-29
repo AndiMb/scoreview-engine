@@ -1,7 +1,7 @@
 #!/bin/sh
-# Native Linux build via Docker — same environment as MuseScore's
-# "Build: Without Qt" CI job (ubuntu-22.04, g++-10; the distro g++ 11 trips
-# over a missing <memory> in kors_logger).
+# Native Linux build via Docker — same environment as the "native" CI job
+# (ubuntu-22.04, g++-10; the distro g++ 11 trips over a missing <memory> in
+# kors_logger).
 #
 # usage: tools/build-native-docker.sh [ninja-args...]
 # Build tree lives in the named volume sve-build; binary at /build/mscz2media.

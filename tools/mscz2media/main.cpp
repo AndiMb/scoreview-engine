@@ -1,8 +1,9 @@
 // mscz2media — native CLI of the Qt-free engine.
 //
-// Loads a .mscz/.mscx, lays it out, and writes per-page DrawData JSON.
-// SVG (Phase 3), MIDI, spos/mpos and metadata JSON follow; the CLI is the
-// native twin of the future wasm build and produces the same outputs.
+// Loads a .mscz/.mscx, lays it out and writes the requested outputs: SVG
+// pages, MIDI, spos/mpos, metadata JSON, and per-page DrawData JSON for
+// diagnostics. The native twin of the wasm build — same loader, same
+// writers, so the two produce the same bytes.
 
 #include <cstdio>
 #include <cstring>
@@ -36,16 +37,16 @@ using namespace mu::engraving;
 
 static int usage()
 {
-    std::printf("usage: mscz2media <score.mscz|mscx> --resources <dir> [--out <dir>] [--drawdata] [--midi]\n"
+    std::printf("usage: mscz2media <score.mscz|mscx> --resources <dir> [--out <dir>] [outputs...]\n"
                 "\n"
                 "  --resources <dir>  directory standing in for the qrc \":/\" tree (repo: resources/)\n"
                 "  --out <dir>        output directory (default: .)\n"
-                "  --drawdata         write page-<n>.drawdata.json per page\n"
                 "  --midi             write score.mid (repeats expanded, RPNs exported)\n"
                 "  --spos             write spos.json (segment positions + playback events)\n"
                 "  --mpos             write mpos.json (measure positions + playback events)\n"
                 "  --meta             write meta.json (score metadata; tracks always empty)\n"
                 "  --svg              write page-<n>.svg per page (text as glyph outlines)\n"
+                "  --drawdata         write page-<n>.drawdata.json per page (diagnostics)\n"
                 "  --dump-playback    print tempomap and expanded repeat list (diagnostics)\n");
     return 2;
 }

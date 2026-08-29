@@ -1,11 +1,11 @@
 #!/bin/sh
-# wasm build via Docker — emscripten/emsdk pinned to the toolchain the Qt fork
-# ships with (4.0.7), so toolchain drift never explains an output diff.
+# wasm build via Docker — emscripten/emsdk pinned to 4.0.7, the version CI
+# builds with, so toolchain drift never explains an output diff.
 #
 # usage: tools/build-wasm-docker.sh [make-args...]
-# Build tree lives in the named volume sve-build-wasm; outputs
-# (scoreview.lib.js/.wasm/.data) land in web-public/ afterwards via
-# tools/collect-wasm.sh or manual docker cp — see CI.
+# Build tree lives in the named volume sve-build-wasm; the outputs
+# (scoreview.lib.js/.wasm/.data) are copied into web-public/ at the end,
+# where the rollup bundles expect them.
 set -e
 root="$(cd "$(dirname "$0")/.." && pwd)"
 rootw="$(cygpath -m "$root" 2>/dev/null || echo "$root")"

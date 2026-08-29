@@ -3,11 +3,11 @@
 
 The native twin of the fork's web-example/corpus.cjs: same report shape, so
 the same comparison answers "did anything change" against the released Qt
-webmscore. No SVG yet (Phase 3) — corpus-compare.py skips svgBytes when the
-candidate has none.
+webmscore. Without --with-svg the report carries no svgBytes, and
+corpus-compare.py skips that field.
 
   corpus-native.py --bin /build/mscz2media --resources /src/resources \
-      --scores /repo/vtest/scores --out report.json [--limit N]
+      --scores /repo/vtest/scores --out report.json [--with-svg] [--limit N]
 """
 
 import argparse

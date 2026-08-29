@@ -3,8 +3,8 @@
 
 Same rules as the fork's corpus_diff.cjs: the count fields must match
 exactly, the stable metadata must match, conversion failures in either
-direction are news. svgBytes is skipped when the candidate has none (the
-native pipeline grows SVG in Phase 3).
+direction are news. svgBytes is skipped when the candidate has none (a
+report generated without --with-svg).
 
 A waivers file records known, deliberate deviations per score and field
 ("pages", "midiBytes", "error", "meta.<key>", ...) with a reason; waived

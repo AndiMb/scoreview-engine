@@ -1,16 +1,24 @@
+# build trees
 /build/
-node_modules/
-*.user
-.vscode/
-.idea/
 /build-wasm/
+
+# wasm artifacts and JS bundles, built into web-public/
 /web-public/.cache/
 /web-public/scoreview.js
 /web-public/scoreview.mjs
 /web-public/scoreview.nodejs.cjs
 /web-public/scoreview.lib.*
+
+# generated type declarations (npm run d-ts)
+/web-public/*.d.ts
 /web-public/src/*.d.ts
-/corpus-node.json
+
+# corpus reports
 /corpus-native.json
-/web-public/schemas.d.ts
-/web-public/scoreview.lib.d.ts
+/corpus-node.json
+
+node_modules/
+*.user
+.vscode/
+.idea/
+__pycache__/
