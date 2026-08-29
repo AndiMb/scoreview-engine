@@ -5,12 +5,15 @@ engine for [ScoreView](https://github.com/AndiMb/scoreview). Takes `.mscz`
 files and produces SVG pages, MIDI, playback positions (spos/mpos) and
 metadata JSON. No Qt, no audio synthesis, no UI.
 
-**Status: Phase 3.** This repository implements the plan in
-`webmscore-fork/docs/qtfree-plan.md`. Phase 2 (native library + `mscz2media`
-CLI, corpus-gated against the released Qt webmscore) is accepted; the
-DrawData→SVG writer is in place — text as glyph outlines (`<defs>`/`<use>`),
-identity stamping (`class="Type seg-N st-N vc-N"`) compatible with the
-webmscore fork's SVG output.
+**Status: Phase 5.** This repository implements the plan in
+`webmscore-fork/docs/qtfree-plan.md`. Phases 2–4 are accepted (native
+library + `mscz2media` CLI, DrawData→SVG writer, fidelity loop: every
+corpus deviation from the released Qt webmscore root-caused against desktop
+MuseScore Studio 4.7.4 and either fixed or waived with the reason on
+record). Phase 5 adds the wasm build (`web/`) and the JS wrapper
+(`web-public/`, package `scoreview-engine`) — API-compatible with webmscore
+for the supported surface; the corpus run under Node must reproduce the
+native fingerprints exactly, SVG bytes included.
 
 ## Architecture
 
@@ -29,7 +32,8 @@ when upstream drifts.
     │   ├── positions/        # spos/mpos writer from layout data
     │   └── api/              # load/convert API, wasm bindings
     ├── resources/            # fonts + SMuFL metadata (replaces the qrc)
-    ├── web/                  # JS wrapper (webmscore-compatible subset, no audio)
+    ├── web/                  # wasm entry (C ABI + WasmRes wire format)
+    ├── web-public/           # JS wrapper (webmscore-compatible subset, no audio)
     └── tools/mscz2media/     # native CLI, same outputs as the wasm build
 
 * **Toolchain:** Emscripten only (wasm) / plain g++ (native CLI). FreeType,
@@ -55,6 +59,37 @@ download host resolves IPv6-only and fails inside containers. `resources/`
 replaces MuseScore's qrc tree (fonts, SMuFL metadata, styles); see
 `src/shadow/README.md` for the shadow rule and the drift guard
 (`tools/check-shadow-drift.sh`).
+
+## Building (wasm + JS wrapper)
+
+    tools/build-wasm-docker.sh    # emscripten/emsdk:4.0.7, volume sve-build-wasm
+    cd web-public && npm ci && npx rollup -c
+
+Outputs `scoreview.lib.js` / `.wasm` / `.data` (preloaded resources,
+LZ4-compressed) plus the bundles `scoreview.nodejs.cjs` (Node),
+`scoreview.mjs`/`scoreview.js` (browser, worker-capable). Usage is
+webmscore's for the supported surface:
+
+```js
+const WebMscore = require('./web-public/scoreview.nodejs.cjs')
+await WebMscore.ready
+const score = await WebMscore.load('mscz', data, [], true)
+await score.saveSvg(0)      // SVG page, text as glyph outlines
+await score.saveMidi()      // repeats expanded, RPNs exported
+await score.savePositions(true /* segments */)
+await score.saveMetadata()
+score.destroy()
+```
+
+Audio, soundfonts, PNG/PDF, MusicXML, MSCZ writing, excerpts and extra
+fonts throw a `NotSupportedError`. The wasm acceptance gate is
+`tools/corpus-node.cjs`: the corpus converted under Node must match the
+native build's fingerprints exactly (`corpus-compare.py --exact-svg`) —
+both go through `sve::loadScore` and the same writers, so any difference
+is a wasm-side bug. The one tolerated class is libm float noise
+(glibc vs musl round transcendentals differently, slur/ornament layout
+amplifies the last ulp into micro coordinate shifts): 11 scores, waived
+per score in `testdata/corpus-wasm-waivers.json`.
 
 ## Relation to webmscore
 

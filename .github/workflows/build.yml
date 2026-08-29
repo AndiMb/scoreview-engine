@@ -50,3 +50,56 @@ jobs:
             --scores musescore/vtest/scores --out build/corpus-native.json --with-svg
           python3 tools/corpus-compare.py testdata/corpus-baseline.json build/corpus-native.json \
             --allow-meta tracks --waivers testdata/corpus-waivers.json
+
+      - name: Upload native corpus report
+        uses: actions/upload-artifact@v4
+        with:
+          name: corpus-native
+          path: build/corpus-native.json
+
+  # Phase-5 gate: the wasm build must reproduce the native fingerprints
+  # exactly (same loader, same writers — any diff is a wasm-side bug).
+  wasm:
+    runs-on: ubuntu-22.04
+    needs: native
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Pre-seed HarfBuzz
+        run: |
+          mkdir -p build-wasm/_deps/harfbuzz
+          cp prefetch/* build-wasm/_deps/harfbuzz/
+          cd build-wasm/_deps/harfbuzz && cmake -E tar xf harfbuzz_src.7z
+
+      - name: Build wasm
+        uses: addnab/docker-run-action@v3
+        with:
+          image: emscripten/emsdk:4.0.7
+          options: -v ${{ github.workspace }}:/src
+          run: |
+            emcmake cmake -S /src -B /src/build-wasm -DCMAKE_BUILD_TYPE=Release
+            cmake --build /src/build-wasm --target scoreview -- -j "$(nproc)"
+            cp /src/build-wasm/scoreview.lib.js /src/build-wasm/scoreview.lib.wasm /src/build-wasm/scoreview.lib.data /src/web-public/
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Bundle JS wrapper
+        working-directory: web-public
+        run: |
+          npm ci
+          npx rollup -c
+
+      - name: Download native corpus report
+        uses: actions/download-artifact@v4
+        with:
+          name: corpus-native
+
+      - name: Corpus under Node
+        run: |
+          node tools/corpus-node.cjs --out corpus-node.json
+          python3 tools/corpus-compare.py corpus-native.json corpus-node.json --exact-svg \
+            --waivers testdata/corpus-wasm-waivers.json

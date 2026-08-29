@@ -104,7 +104,7 @@ static String recognizeComposer(const Score* score)
     return rightmostText ? rightmostText->plainText() : String();
 }
 
-static String title(const Score* score)
+static String scoreTitle(const Score* score)
 {
     String title;
     const Text* text = score->getText(TextStyleType::TITLE);
@@ -284,6 +284,11 @@ static JsonObject typeDataJson(Score* score)
     return typesData;
 }
 
+String ScoreMeta::title(const Score* score)
+{
+    return scoreTitle(score);
+}
+
 ByteArray ScoreMeta::json(Score* score)
 {
     IF_ASSERT_FAILED(score) {
@@ -313,7 +318,7 @@ ByteArray ScoreMeta::json(Score* score)
     json.set("tempoText", _tempo.second);
     json.set("textFramesData", typeDataJson(score));
     json.set("timesig", timesig(score));
-    json.set("title", title(score));
+    json.set("title", scoreTitle(score));
     json.set("tracks", JsonArray());
 
     return JsonDocument(json).toJson(JsonDocument::Format::Indented);

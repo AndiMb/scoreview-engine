@@ -8,6 +8,7 @@
 // alphabetical order QJsonObject used.
 
 #include "global/types/bytearray.h"
+#include "global/types/string.h"
 
 namespace mu::engraving {
 class Score;
@@ -18,5 +19,6 @@ class ScoreMeta
 {
 public:
     static muse::ByteArray json(mu::engraving::Score* score);
+    static muse::String title(const mu::engraving::Score* score);
 };
 }

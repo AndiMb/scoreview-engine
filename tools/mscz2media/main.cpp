@@ -24,11 +24,11 @@
 #include "engraving/dom/repeatlist.h"
 #include "engraving/dom/tempo.h"
 #include "engraving/rendering/score/scorerenderer.h"
+#include "api/scoreloader.h"
 #include "meta/scoremeta.h"
 #include "positions/positionswriter.h"
 #include "shadow/exportmidi.h"
 #include "svg/svgwriter.h"
-#include "utils/scorerw.h"
 
 using namespace muse;
 using namespace muse::draw;
@@ -95,19 +95,11 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    MasterScore* score = ScoreRW::readScore(String::fromStdString(scorePath), true);
+    MasterScore* score = sve::loadScore(muse::io::path_t(scorePath));
     if (!score) {
         std::fprintf(stderr, "mscz2media: failed to read %s\n", scorePath.c_str());
         return 1;
     }
-
-    // Desktop and webmscore both run Score::update() after the initial layout
-    // (via NotationProject setup / webmscore's _doLoad). If the layout added
-    // elements that request a tempomap rebuild (courtesy time signatures do),
-    // that pass wipes the volta tempo entries Volta::setTempo() planted during
-    // layout — so without it the exported MIDI carries extra tempo events the
-    // Qt pipeline doesn't have (vtest: volta-1/2, slurs-30).
-    score->update();
 
     std::printf("pages=%zu measures=%zu tracks=%zu\n",
                 score->npages(), score->nmeasures(), score->ntracks());

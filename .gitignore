@@ -3,3 +3,12 @@ node_modules/
 *.user
 .vscode/
 .idea/
+/build-wasm/
+/web-public/.cache/
+/web-public/scoreview.js
+/web-public/scoreview.mjs
+/web-public/scoreview.nodejs.cjs
+/web-public/scoreview.lib.*
+/web-public/src/*.d.ts
+/corpus-node.json
+/corpus-native.json

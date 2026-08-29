@@ -29,7 +29,12 @@ def main():
     ap.add_argument("--allow-meta", action="append", default=[],
                     help="metadata key allowed to differ (recorded, not fatal)")
     ap.add_argument("--waivers", help="JSON file of known deviations per score and field")
+    ap.add_argument("--exact-svg", action="store_true",
+                    help="compare svgBytes exactly too (native vs wasm of the same "
+                         "engine; never against the Qt baseline, whose generator differs)")
     args = ap.parse_args()
+
+    exact = EXACT + (["svgBytes"] if args.exact_svg else [])
 
     with open(args.baseline, encoding="utf-8") as f:
         base = json.load(f)["scores"]
@@ -72,7 +77,7 @@ def main():
         if "error" in b and "error" in c:
             continue
 
-        for key in EXACT:
+        for key in exact:
             if b.get(key) != c.get(key):
                 report(name, key, f"{name}: {key} {b.get(key)} -> {c.get(key)}")
 

@@ -11,6 +11,7 @@
 #include "engraving/dom/staff.h"
 #include "engraving/dom/stafflines.h"
 #include "engraving/dom/system.h"
+#include "engraving/dom/text.h"
 #include "engraving/rendering/score/scorerenderer.h"
 
 #include "positions/segmentindex.h"
@@ -171,9 +172,12 @@ ByteArray SvgWriter::write(Score* score, size_t pageNumber, const Options& opt)
         }
     }
 
-    // 2nd pass: the rest of the elements, in paint order
+    // 2nd pass: the rest of the elements, in paint order. stable_sort where
+    // upstream uses std::sort: elementLessThan leaves large equal-z classes,
+    // and the unstable order of equal keys differs between libstdc++ (native)
+    // and libc++ (wasm) — the corpus gate compares the two byte-for-byte.
     std::vector<EngravingItem*> elements = page->elements();
-    std::sort(elements.begin(), elements.end(), elementLessThan);
+    std::stable_sort(elements.begin(), elements.end(), elementLessThan);
 
     for (const EngravingItem* element : elements) {
         if (!element->collectForDrawing()) {
@@ -209,8 +213,20 @@ ByteArray SvgWriter::write(Score* score, size_t pageNumber, const Options& opt)
     // document geometry the consumer needs.
     dd->viewport = RectF(0, 0, pageRect.width(), pageRect.height());
 
-    std::string title = score->name().toStdString();
-    if (pages.size() > 1) {
+    // Deterministic title: the score's title text / workTitle tag, never the
+    // file name — the wasm build loads from a generated temp path, so a name
+    // fallback would make native and wasm bytes differ on every untitled
+    // score (and it made webmscore's SVG title a six-char random string).
+    // Untitled scores get no <title> element at all.
+    std::string title;
+    const Text* titleText = score->getText(TextStyleType::TITLE);
+    if (titleText) {
+        title = titleText->plainText().toStdString();
+    }
+    if (title.empty()) {
+        title = score->metaTag(u"workTitle").toStdString();
+    }
+    if (!title.empty() && pages.size() > 1) {
         title += " (" + std::to_string(pageNumber + 1) + ")";
     }
 

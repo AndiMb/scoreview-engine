@@ -1,0 +1,14 @@
+{
+  "_comment": "Waivers for the native-vs-wasm corpus compare (Phase-5 gate: corpus-compare.py corpus-native.json corpus-node.json --exact-svg). The two builds share sve::loadScore and every writer, and all structural fields (pages, measures, positions, midiBytes, metadata) match on all 569 scores. What remains is libm-level float noise: x86-64/glibc (native) and wasm/musl (emscripten) round transcendental functions differently in the last ulp, and slur/tie/ornament layout amplifies that into coordinate differences of 0.02-1.3 engraving units (0.4 um - 0.03 mm at DPI 1200), which the SVG number formatting then turns into a different byte count. Verified per score by diffing the actual SVGs: only curve control points and micro y-offsets move; element structure and order are identical. Recorded 2026-08-29 with emsdk 4.0.7 vs g++-10; a toolchain bump that makes any of these equal trips the stale-waiver guard, which is the reminder to drop the entry.",
+  "arpeggio-2.mscz": { "svgBytes": "libm float noise in curve coordinates (33044 native -> 33043 wasm)" },
+  "articulation-15.mscz": { "svgBytes": "libm float noise in curve coordinates (53769 -> 53767)" },
+  "hopo-3.mscz": { "svgBytes": "libm float noise in curve coordinates (28260 -> 28256)" },
+  "kerning-3.mscz": { "svgBytes": "libm float noise in curve coordinates (54978 -> 54977)" },
+  "ornament-3.mscz": { "svgBytes": "libm float noise: ornament y offset differs by 0.02 units (24694 -> 24704)" },
+  "slurs-11.mscz": { "svgBytes": "libm float noise in slur control points (30170 -> 30171)" },
+  "slurs-15.mscz": { "svgBytes": "libm float noise in slur control points (37977 -> 37978)" },
+  "slurs-19.mscz": { "svgBytes": "libm float noise in slur control points (17727 -> 17729)" },
+  "slurs-22.mscz": { "svgBytes": "libm float noise: slur y position differs by 0.073 units (14886 -> 14833)" },
+  "slurs-25.mscz": { "svgBytes": "libm float noise in slur control points (24994 -> 24993)" },
+  "slurs-28.mscz": { "svgBytes": "libm float noise in slur control points (11254 -> 11255)" }
+}

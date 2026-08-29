@@ -28,6 +28,13 @@ set(CMAKE_MODULE_PATH
 include(SetupBuildEnvironment)
 include(GetPlatformInfo)
 
+if(EMSCRIPTEN)
+    # muse_global's zip/serialization code includes zlib.h and expects the
+    # library "from the main linker" under emcc — emscripten-ports provides
+    # both, but only if the flag is set at compile time for every module.
+    add_compile_options("-sUSE_ZLIB=1")
+endif()
+
 set(THIRDPARTY_DIR ${MU_ROOT}/thirdparty)
 
 set(MUSE_QT_SUPPORT OFF)
@@ -89,6 +96,7 @@ set(FONTSTACK_SRC
 )
 
 add_library(sve_engine STATIC
+    src/api/scoreloader.cpp
     src/config/engravinginit.cpp
     src/shadow/engravingfontsprovider.cpp
     src/shadow/midifile.cpp
@@ -124,15 +132,41 @@ target_link_libraries(sve_engine PUBLIC
     ${FREETYPE_LIBRARIES}
 )
 
-# ScoreRW comes from the submodule's test utils for now; it does the
-# read + doLayout dance the converter needs. Replaced by an own loader once
-# the API layer (src/api) lands.
-add_executable(mscz2media
-    tools/mscz2media/main.cpp
-    ${MU_ROOT}/src/engraving/tests/utils/scorerw.cpp
-)
-target_include_directories(mscz2media PRIVATE
-    ${MU_ROOT}/src/engraving/tests
-    ${MU_ROOT}/src/engraving/tests/utils
-)
-target_link_libraries(mscz2media sve_engine)
+if(NOT EMSCRIPTEN)
+    add_executable(mscz2media tools/mscz2media/main.cpp)
+    target_link_libraries(mscz2media sve_engine)
+endif()
+
+if(EMSCRIPTEN)
+    # The wasm module. JS glue contract: MODULARIZE/EXPORT_ES6 default export
+    # consumed by web-public/src/helper.js, C ABI + WasmRes layout consumed by
+    # the wrapper, the preloaded package at /resources read by
+    # sve::initEngraving. Output: scoreview.lib.js + .wasm + .data.
+    set(CMAKE_EXECUTABLE_SUFFIX ".lib.js")
+
+    add_executable(scoreview
+        web/main.cpp
+        web/wasmres.cpp
+    )
+    target_link_libraries(scoreview sve_engine)
+    # SetupBuildEnvironment points CMAKE_RUNTIME_OUTPUT_DIRECTORY into the
+    # submodule tree for wasm; keep the artifacts in the build tree instead.
+    set_target_properties(scoreview PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+
+    set(WASM_LINK_FLAGS "--no-entry")
+    set(WASM_LINK_FLAGS "${WASM_LINK_FLAGS} -s WASM=1")
+    set(WASM_LINK_FLAGS "${WASM_LINK_FLAGS} -s DYNAMIC_EXECUTION=0")
+    set(WASM_LINK_FLAGS "${WASM_LINK_FLAGS} -s EXPORT_ES6=1 -s USE_ES6_IMPORT_META=1 -s MODULARIZE=1")
+    set(WASM_LINK_FLAGS "${WASM_LINK_FLAGS} -s NODEJS_CATCH_EXIT=0 -s NODEJS_CATCH_REJECTION=0")
+    set(WASM_LINK_FLAGS "${WASM_LINK_FLAGS} -s ALLOW_TABLE_GROWTH=1")
+    set(WASM_LINK_FLAGS "${WASM_LINK_FLAGS} -s ALLOW_MEMORY_GROWTH=1")
+    set(WASM_LINK_FLAGS "${WASM_LINK_FLAGS} -s INITIAL_MEMORY=32MB")
+    set(WASM_LINK_FLAGS "${WASM_LINK_FLAGS} -s EXPORTED_FUNCTIONS='[\"_malloc\", \"_free\"]'")
+    set(WASM_LINK_FLAGS "${WASM_LINK_FLAGS} -s EXPORTED_RUNTIME_METHODS='[\"ccall\", \"cwrap\", \"stringToUTF8\", \"UTF8ToString\", \"getValue\", \"setValue\", \"HEAPU8\", \"FS_createDataFile\"]'")
+    # zlib for the mscz container (muse_global expects it from the linker
+    # under emcc), LZ4 for the preloaded package.
+    set(WASM_LINK_FLAGS "${WASM_LINK_FLAGS} -s USE_ZLIB=1")
+    set(WASM_LINK_FLAGS "${WASM_LINK_FLAGS} -s LZ4=1")
+    set(WASM_LINK_FLAGS "${WASM_LINK_FLAGS} --preload-file ${CMAKE_CURRENT_LIST_DIR}/resources@/resources")
+    set_target_properties(scoreview PROPERTIES LINK_FLAGS ${WASM_LINK_FLAGS})
+endif()

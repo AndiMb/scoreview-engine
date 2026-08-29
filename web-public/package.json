@@ -1,0 +1,50 @@
+{
+    "name": "scoreview-engine",
+    "version": "4.7.4",
+    "description": "MuseScore's engraving engine in WebAssembly, without Qt. Read mscz data, generate SVG/MIDI/positions/metadata in browsers and Node. API-compatible successor of webmscore for that surface.",
+    "type": "module",
+    "types": "./src/index.d.ts",
+    "main": "./scoreview.nodejs.cjs",
+    "browser": "./scoreview.mjs",
+    "files": [
+        "src",
+        "schemas.ts",
+        "scoreview.js",
+        "scoreview.mjs",
+        "scoreview.nodejs.cjs",
+        "scoreview.lib.*",
+        "!scoreview.lib.d.ts"
+    ],
+    "keywords": [
+        "musescore",
+        "mscz",
+        "svg",
+        "midi",
+        "sheet-music",
+        "scorefile",
+        "webassembly"
+    ],
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/AndiMb/scoreview-engine.git"
+    },
+    "bugs": {
+        "url": "https://github.com/AndiMb/scoreview-engine/issues"
+    },
+    "homepage": "https://github.com/AndiMb/scoreview-engine#readme",
+    "author": "AndiMb",
+    "license": "GPL-3.0-only",
+    "engines": {
+        "node": ">=18"
+    },
+    "devDependencies": {
+        "rollup": "^2.8.2",
+        "typescript": "^5"
+    },
+    "scripts": {
+        "build": "npm run clean:d-ts && npm run bundle && npm run d-ts",
+        "bundle": "rollup -c",
+        "clean:d-ts": "rm -f src/*.d.ts *.d.ts",
+        "d-ts": "tsc --emitDeclarationOnly --declaration --allowJs --lib esnext --target esnext src/index.js"
+    }
+}
