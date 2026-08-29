@@ -47,6 +47,6 @@ jobs:
       - name: Corpus
         run: |
           python3 tools/corpus-native.py --bin build/mscz2media --resources resources \
-            --scores musescore/vtest/scores --out build/corpus-native.json
+            --scores musescore/vtest/scores --out build/corpus-native.json --with-svg
           python3 tools/corpus-compare.py testdata/corpus-baseline.json build/corpus-native.json \
             --allow-meta tracks --waivers testdata/corpus-waivers.json

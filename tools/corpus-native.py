@@ -38,11 +38,12 @@ def stable_meta(meta):
     return out
 
 
-def fingerprint(binary, resources, score, workdir):
-    proc = subprocess.run(
-        [binary, score, "--resources", resources, "--out", workdir,
-         "--midi", "--spos", "--mpos", "--meta"],
-        capture_output=True, text=True, timeout=180)
+def fingerprint(binary, resources, score, workdir, with_svg=False):
+    argv = [binary, score, "--resources", resources, "--out", workdir,
+            "--midi", "--spos", "--mpos", "--meta"]
+    if with_svg:
+        argv.append("--svg")
+    proc = subprocess.run(argv, capture_output=True, text=True, timeout=180)
     if proc.returncode != 0:
         tail = (proc.stderr or proc.stdout or "").strip().splitlines()
         raise RuntimeError(tail[-1] if tail else f"exit {proc.returncode}")
@@ -63,7 +64,7 @@ def fingerprint(binary, resources, score, workdir):
     segments = load("spos.json")    # corpus.cjs: savePositions(true) = segments
     midi_bytes = os.path.getsize(os.path.join(workdir, "score.mid"))
 
-    return {
+    fp = {
         "pages": pages,
         "measures": meta.get("measures"),
         "parts": len(meta.get("parts") or []),
@@ -73,6 +74,11 @@ def fingerprint(binary, resources, score, workdir):
         "midiBytes": midi_bytes,
         "meta": stable_meta(meta),
     }
+    if with_svg:
+        # Recorded, not compared against the Qt baseline — the generators
+        # encode pages differently. Serves as the native SVG's own trend line.
+        fp["svgBytes"] = os.path.getsize(os.path.join(workdir, "page-1.svg"))
+    return fp
 
 
 def main():
@@ -82,6 +88,8 @@ def main():
     ap.add_argument("--scores", action="append", required=True)
     ap.add_argument("--out", default="report.json")
     ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--with-svg", action="store_true",
+                    help="also write SVG per score and record page-1 sizes")
     args = ap.parse_args()
 
     files = []
@@ -96,7 +104,7 @@ def main():
         key = os.path.basename(f)
         with tempfile.TemporaryDirectory() as workdir:
             try:
-                report["scores"][key] = fingerprint(args.bin, args.resources, f, workdir)
+                report["scores"][key] = fingerprint(args.bin, args.resources, f, workdir, args.with_svg)
                 ok += 1
             except Exception as err:  # noqa: BLE001 — every failure is a data point
                 report["scores"][key] = {"error": str(err)}

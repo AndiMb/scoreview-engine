@@ -2,7 +2,6 @@
 
 #include <algorithm>
 
-#include "bufferedpaintprovider.h"
 #include "painter.h"
 
 #include "engraving/dom/measure.h"
@@ -16,6 +15,7 @@
 
 #include "positions/segmentindex.h"
 #include "drawdatasvg.h"
+#include "svgpaintprovider.h"
 
 #include "log.h"
 
@@ -76,7 +76,7 @@ ByteArray SvgWriter::write(Score* score, size_t pageNumber, const Options& opt)
 
     RectF pageRect = page->pageBoundingRect();
 
-    auto provider = std::make_shared<BufferedPaintProvider>();
+    auto provider = std::make_shared<SvgPaintProvider>();
     Painter painter(provider, "svgwriter");
     painter.setAntialiasing(true);
 

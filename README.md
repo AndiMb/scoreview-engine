@@ -66,11 +66,21 @@ rebaselined.
 
 The gate runs in CI: `tools/corpus-native.py` fingerprints every
 `musescore/vtest/scores` conversion (pages, measures, positions counts,
-MIDI bytes, stable metadata) and `tools/corpus-compare.py` diffs against
+MIDI bytes, stable metadata; with `--with-svg` also SVG generation and
+page-1 sizes) and `tools/corpus-compare.py` diffs against
 `testdata/corpus-baseline.json` — fingerprints of the released Qt
 webmscore (v4.7.4-scoreview.7), regenerable with the fork's
 `web-example/corpus.cjs`. Only the metadata `tracks` count may differ
 (no audio here, the list is always empty).
+
+SVG fidelity is checked with `tools/svg-spotcheck.py`: same-named SVGs
+from the Qt release (via `saveSvg` in Node) and from `mscz2media --svg`
+are compared by viewBox and by pixels, both rendered with the same
+headless Chromium behind a width-normalizing shell (the generators
+declare physical size differently: Qt in mm — which this writer also
+emits — but encode glyphs differently, so the picture is the contract).
+A light blur forgives the sub-pixel kerning shifts of HarfBuzz vs Qt;
+structural defects land far above the thresholds.
 
 ## License
 

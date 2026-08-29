@@ -259,7 +259,19 @@ static void writeData(std::ostream& os, SvgContext& ctx, const DrawData::Data& d
         // DrawText's point (rect.topLeft() in Point mode) is the baseline
         // origin, exactly as the layout positioned it.
         PointF origin = t.rect.topLeft();
-        std::vector<FontsEngine::GlyphRun> runs = ctx.fontsEngine->glyphRuns(state.font, t.text.toStdU32String());
+        // The SvgPaintProvider reports engraving's DPI, so the recorded font
+        // still carries the layout's point size; convert for the 360-DPI
+        // FontsEngine here, exactly once (the metrics-side twin lives in the
+        // shadow fontprovider).
+        Font f = state.font;
+        static constexpr double MU_ENGRAVING_DPI = 1200; // same as mu::engraving::DPI
+        static constexpr double DRAW_DPI = 360;          // muse::draw DPI (fontstypes.h)
+        if (f.pixelSize() > 0) {
+            f.setPixelSize(static_cast<int>(f.pixelSize() * MU_ENGRAVING_DPI / DRAW_DPI + 0.5));
+        } else {
+            f.setPointSizeF(f.pointSizeF() * MU_ENGRAVING_DPI / DRAW_DPI);
+        }
+        std::vector<FontsEngine::GlyphRun> runs = ctx.fontsEngine->glyphRuns(f, t.text.toStdU32String());
         std::string fill = colorStr(state.pen.color());
         for (const FontsEngine::GlyphRun& run : runs) {
             std::string id = ctx.glyphDef(run.face, run.glyphIdx);
@@ -326,7 +338,9 @@ ByteArray DrawDataSvg::toSvg(const DrawDataPtr& data, const std::string& title)
     const RectF& vp = data->viewport;
     std::ostringstream os;
     os << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
-       << "<svg width=\"" << fmt(vp.width()) << "px\" height=\"" << fmt(vp.height()) << "px\""
+       // physical size in mm, as the Qt generator writes it — viewport units
+       // are engraving units (DPI 1200)
+       << "<svg width=\"" << fmt(vp.width() / 1200.0 * 25.4) << "mm\" height=\"" << fmt(vp.height() / 1200.0 * 25.4) << "mm\""
        << " viewBox=\"" << fmt(vp.x()) << " " << fmt(vp.y()) << " " << fmt(vp.width()) << " " << fmt(vp.height()) << "\""
        << " xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\""
        << " version=\"1.2\" baseProfile=\"tiny\">\n"
