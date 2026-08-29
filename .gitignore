@@ -12,3 +12,5 @@ node_modules/
 /web-public/src/*.d.ts
 /corpus-node.json
 /corpus-native.json
+/web-public/schemas.d.ts
+/web-public/scoreview.lib.d.ts
