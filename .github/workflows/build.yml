@@ -91,7 +91,7 @@ jobs:
         working-directory: web-public
         run: |
           npm ci
-          npx rollup -c
+          npm run build
 
       - name: Download native corpus report
         uses: actions/download-artifact@v4
@@ -103,3 +103,44 @@ jobs:
           node tools/corpus-node.cjs --out corpus-node.json
           python3 tools/corpus-compare.py corpus-native.json corpus-node.json --exact-svg \
             --waivers testdata/corpus-wasm-waivers.json
+
+      - name: Pack npm tarball
+        working-directory: web-public
+        run: npm pack
+
+      - name: Upload npm tarball
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-pack
+          path: web-public/scoreview-engine-*.tgz
+
+  # Distribution through GitHub Releases only (like the webmscore fork):
+  # a push to main whose commit message starts with "release v<tag>" creates
+  # the release and attaches the corpus-gated tarball from this same run.
+  publish:
+    if: github.ref_name == 'main' && startsWith(github.event.head_commit.message, 'release v')
+    needs: [native, wasm]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download npm tarball
+        uses: actions/download-artifact@v4
+        with:
+          name: npm-pack
+
+      - name: Version from commit message
+        env:
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+        run: |
+          VERSION=$(echo "$COMMIT_MSG" | head -1 | cut -d ' ' -f 2)
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "$VERSION"
+
+      - name: Publish to GitHub Releases
+        uses: softprops/action-gh-release@v1
+        with:
+          files: scoreview-engine-*.tgz
+          name: scoreview-engine ${{ env.VERSION }}
+          tag_name: ${{ env.VERSION }}
+          target_commitish: ${{ github.sha }}
