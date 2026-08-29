@@ -29,7 +29,7 @@ when upstream drifts.
     │   ├── positions/        # spos/mpos writer from layout data
     │   ├── meta/             # metadata JSON writer
     │   └── api/              # the one score loader both builds use
-    ├── resources/            # fonts + SMuFL metadata (replaces the qrc)
+    ├── resources/            # fonts (woff2) + SMuFL metadata (replaces the qrc)
     ├── web/                  # wasm entry (C ABI + WasmRes wire format)
     ├── web-public/           # JS wrapper (webmscore-compatible subset, no audio)
     ├── testdata/             # corpus baseline and waivers, one test score
@@ -37,6 +37,11 @@ when upstream drifts.
 
 * **Toolchain:** Emscripten only (wasm) / plain g++ (native CLI). FreeType,
   HarfBuzz and zlib, no Qt anywhere.
+* **Fonts:** woff2, read by FreeType with the brotli decoder vendored in
+  `thirdparty/brotli` — MuseScore's own FreeType wrapper disables brotli, so
+  the top-level CMakeLists configures FreeType itself (see
+  `src/shadow/README.md`). The same decoder is what lets a caller hand
+  `addFont()` a woff2 file.
 * **API:** webmscore-compatible for the supported subset (SVG pages, MIDI,
   spos/mpos, metadata, extra fonts, `destroy()`). Audio, PNG/PDF and MusicXML
   methods throw a clear "not supported in this build" error.
@@ -100,9 +105,10 @@ replaces MuseScore's qrc tree (fonts, SMuFL metadata, styles); see
 
 Outputs `scoreview.lib.js` / `.wasm` / `.data` (preloaded resources,
 LZ4-compressed) plus the bundles `scoreview.nodejs.cjs` (Node),
-`scoreview.mjs`/`scoreview.js` (browser, worker-capable) — 9.1 MB of wasm
-against the Qt build's 17.5 MB, and the full corpus converts under Node in
-7.0 s against 20.2 s. Usage is webmscore's for the supported surface:
+`scoreview.mjs`/`scoreview.js` (browser, worker-capable) — 9.3 MB of wasm and
+a 4.8 MB resource pack, against the Qt build's 17.5 MB of wasm, and the full
+corpus converts under Node in 7.0 s against 20.2 s. The npm tarball is 7.0 MB.
+Usage is webmscore's for the supported surface:
 
 ```js
 const WebMscore = require('./web-public/scoreview.nodejs.cjs')
@@ -116,7 +122,8 @@ score.destroy()
 ```
 
 The `fonts` argument of `load()` (webmscore's CJK path) registers extra fonts
-as text-substitution fallbacks for glyphs the score fonts lack. Audio,
+as text-substitution fallbacks for glyphs the score fonts lack — woff2, otf,
+ttf and ttc alike. Audio,
 soundfonts, PNG/PDF, MusicXML, MSCZ writing and excerpts throw a
 `NotSupportedError`. `web-example/browser.html` is a smoke test for both
 browser bundles.

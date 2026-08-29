@@ -19,11 +19,19 @@ Current shadow copies:
 | `fontsengine.h` / `fontsengine.cpp` | `src/framework/draw/internal/fontsengine.{h,cpp}` | added `GlyphRun`/`glyphRuns()` — render()'s loop yielding glyph identities and pen positions instead of SDF bitmaps, for the SVG writer; still compiled with the forced prelude |
 | `fontprovider.cpp` | `src/framework/draw/internal/fontprovider.cpp` | every Font rescaled ×(1200/360) before reaching the FontsEngine — the metrics-side twin of `Painter::applyFontSizeScaling`; without it text is measured 10/3 too narrow (the Duckwerk page-count class) |
 
+A third case needs no copy but the same guard: `src/framework/draw/thirdparty/
+freetype/CMakeLists.txt`. That wrapper hard-sets `FT_DISABLE_BROTLI`, which
+would leave FreeType unable to read a single `.woff2` — the format the
+resource pack and `addFont()` use — so the top-level CMakeLists configures
+FreeType itself and adds the submodule's `freetype-<version>` tree directly.
+The wrapper's blob is pinned all the same: it carries the FreeType version in
+its paths, so a bump has to be noticed.
+
 ## Drift guard
 
 `upstream.lock` pins the git blob id of every upstream counterpart (including
-prelude targets). `tools/check-shadow-drift.sh` verifies the pins against the
-submodule and fails when upstream drifts — CI runs it on every build. When it
-fires: re-derive the shadow copy / re-check the prelude against the new
-upstream file, then update the lock with the new blob id
-(`git -C musescore rev-parse HEAD:<path>`).
+prelude targets and the FreeType wrapper above). `tools/check-shadow-drift.sh`
+verifies the pins against the submodule and fails when upstream drifts — CI
+runs it on every build. When it fires: re-derive the shadow copy / re-check
+the prelude against the new upstream file, then update the lock with the new
+blob id (`git -C musescore rev-parse HEAD:<path>`).

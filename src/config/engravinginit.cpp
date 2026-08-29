@@ -46,26 +46,26 @@ bool sve::initEngraving(const std::string& resourceRoot)
     ioc->registerExport<rendering::IScoreRenderer>(MODULE_NAME, new rendering::score::ScoreRenderer());
 
     // Fonts as in EngravingModule::onInit, trimmed to what conversion needs
-    fdb->addFont(FontDataKey(u"Edwin", false, false), ":/fonts/edwin/Edwin-Roman.otf");
-    fdb->addFont(FontDataKey(u"Edwin", false, true), ":/fonts/edwin/Edwin-Italic.otf");
-    fdb->addFont(FontDataKey(u"Edwin", true, false), ":/fonts/edwin/Edwin-Bold.otf");
-    fdb->addFont(FontDataKey(u"Edwin", true, true), ":/fonts/edwin/Edwin-BdIta.otf");
+    fdb->addFont(FontDataKey(u"Edwin", false, false), ":/fonts/edwin/Edwin-Roman.woff2");
+    fdb->addFont(FontDataKey(u"Edwin", false, true), ":/fonts/edwin/Edwin-Italic.woff2");
+    fdb->addFont(FontDataKey(u"Edwin", true, false), ":/fonts/edwin/Edwin-Bold.woff2");
+    fdb->addFont(FontDataKey(u"Edwin", true, true), ":/fonts/edwin/Edwin-BdIta.woff2");
 
-    fdb->addFont(FontDataKey(u"Bravura"), ":/fonts/bravura/Bravura.otf");
-    engravingFonts->addInternalFont("Bravura", "Bravura", ":/fonts/bravura/Bravura.otf");
-    fdb->addFont(FontDataKey(u"Bravura Text"), ":/fonts/bravura/BravuraText.otf");
-    fdb->addFont(FontDataKey(u"Leland"), ":/fonts/leland/Leland.otf");
-    engravingFonts->addInternalFont("Leland", "Leland", ":/fonts/leland/Leland.otf");
-    fdb->addFont(FontDataKey(u"Leland Text"), ":/fonts/leland/LelandText.otf");
+    fdb->addFont(FontDataKey(u"Bravura"), ":/fonts/bravura/Bravura.woff2");
+    engravingFonts->addInternalFont("Bravura", "Bravura", ":/fonts/bravura/Bravura.woff2");
+    fdb->addFont(FontDataKey(u"Bravura Text"), ":/fonts/bravura/BravuraText.woff2");
+    fdb->addFont(FontDataKey(u"Leland"), ":/fonts/leland/Leland.woff2");
+    engravingFonts->addInternalFont("Leland", "Leland", ":/fonts/leland/Leland.woff2");
+    fdb->addFont(FontDataKey(u"Leland Text"), ":/fonts/leland/LelandText.woff2");
 
-    fdb->addFont(FontDataKey(u"FreeSerif"), ":/fonts/FreeSerif.ttf");
-    fdb->addFont(FontDataKey(u"FreeSerif", true, false), ":/fonts/FreeSerifBold.ttf");
-    fdb->addFont(FontDataKey(u"FreeSerif", false, true), ":/fonts/FreeSerifItalic.ttf");
-    fdb->addFont(FontDataKey(u"FreeSerif", true, true), ":/fonts/FreeSerifBoldItalic.ttf");
-    fdb->addFont(FontDataKey(u"FreeSans"), ":/fonts/FreeSans.ttf");
-    fdb->addFont(FontDataKey(u"MScoreTabulature"), ":/fonts/mscoreTab.ttf");
-    fdb->addFont(FontDataKey(u"MscoreBC"), ":/fonts/mscore-BC.ttf");
-    fdb->addFont(FontDataKey(u"Campania"), ":/fonts/campania/Campania.otf");
+    fdb->addFont(FontDataKey(u"FreeSerif"), ":/fonts/FreeSerif.woff2");
+    fdb->addFont(FontDataKey(u"FreeSerif", true, false), ":/fonts/FreeSerifBold.woff2");
+    fdb->addFont(FontDataKey(u"FreeSerif", false, true), ":/fonts/FreeSerifItalic.woff2");
+    fdb->addFont(FontDataKey(u"FreeSerif", true, true), ":/fonts/FreeSerifBoldItalic.woff2");
+    fdb->addFont(FontDataKey(u"FreeSans"), ":/fonts/FreeSans.woff2");
+    fdb->addFont(FontDataKey(u"MScoreTabulature"), ":/fonts/mscoreTab.woff2");
+    fdb->addFont(FontDataKey(u"MscoreBC"), ":/fonts/mscore-BC.woff2");
+    fdb->addFont(FontDataKey(u"Campania"), ":/fonts/campania/Campania.woff2");
 
     fdb->setDefaultFont(Font::Type::Unknown, FontDataKey(u"Edwin"));
     fdb->setDefaultFont(Font::Type::Text, FontDataKey(u"Edwin"));
