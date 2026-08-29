@@ -36,5 +36,16 @@ jobs:
 
       - name: Convert test score
         run: |
-          build/mscz2media testdata/repeat-test.mscz --resources resources --out build/out --drawdata
+          build/mscz2media testdata/repeat-test.mscz --resources resources --out build/out --drawdata --midi --spos --mpos --meta
           test -s build/out/page-1.drawdata.json
+
+      # The corpus gate: fingerprints of MIDI, spos/mpos and metadata for all
+      # vtest scores must match the released Qt webmscore (baseline in
+      # testdata/). "tracks" is allowed to differ — this build has no audio,
+      # so the metadata track list is always empty.
+      - name: Corpus
+        run: |
+          python3 tools/corpus-native.py --bin build/mscz2media --resources resources \
+            --scores musescore/vtest/scores --out build/corpus-native.json
+          python3 tools/corpus-compare.py testdata/corpus-baseline.json build/corpus-native.json \
+            --allow-meta tracks --waivers testdata/corpus-waivers.json

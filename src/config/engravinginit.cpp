@@ -13,6 +13,7 @@
 #include "engraving/internal/engravingfontsprovider.h"
 #include "engraving/infrastructure/smufl.h"
 #include "engraving/style/defaultstyle.h"
+#include "engraving/dom/instrtemplate.h"
 #include "engraving/dom/stafftype.h"
 #include "engraving/dom/drumset.h"
 #include "engraving/dom/figuredbass.h"
@@ -85,6 +86,15 @@ bool sve::initEngraving(const std::string& resourceRoot)
     StaffType::initStaffTypes(conf->defaultColor());
     Drumset::initDrumset();
     FiguredBass::readConfigFile(String());
+
+    // Must come after StaffType::initStaffTypes — template reading resolves
+    // staff type presets. Without the templates,
+    // Instrument::setSingleNoteDynamicsFromTemplate falls back to true for
+    // every instrument and the MIDI export grows CC events per note that the
+    // Qt build (templates loaded) does not emit.
+    if (!loadInstrumentTemplates(":/engraving/instruments/instruments.xml")) {
+        return false;
+    }
 
     return true;
 }

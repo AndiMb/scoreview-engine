@@ -61,6 +61,14 @@ this pipeline is measured against. The acceptance gate for this engine is
 the corpus job: same tolerances, page counts equal unless deliberately
 rebaselined.
 
+The gate runs in CI: `tools/corpus-native.py` fingerprints every
+`musescore/vtest/scores` conversion (pages, measures, positions counts,
+MIDI bytes, stable metadata) and `tools/corpus-compare.py` diffs against
+`testdata/corpus-baseline.json` — fingerprints of the released Qt
+webmscore (v4.7.4-scoreview.7), regenerable with the fork's
+`web-example/corpus.cjs`. Only the metadata `tracks` count may differ
+(no audio here, the list is always empty).
+
 ## License
 
 GPL-3.0 — see [LICENSE.txt](LICENSE.txt). Contains code from
