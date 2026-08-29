@@ -1,0 +1,40 @@
+name: Build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  native:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Shadow drift guard
+        run: tools/check-shadow-drift.sh
+
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends g++-10 cmake ninja-build zlib1g-dev
+
+      - name: Pre-seed HarfBuzz
+        run: |
+          mkdir -p build/_deps/harfbuzz
+          cp prefetch/* build/_deps/harfbuzz/
+          cd build/_deps/harfbuzz && cmake -E tar xf harfbuzz_src.7z
+
+      - name: Configure and build
+        env:
+          CC: gcc-10
+          CXX: g++-10
+        run: |
+          cmake -S . -B build -GNinja -DCMAKE_BUILD_TYPE=Debug
+          ninja -C build
+
+      - name: Convert test score
+        run: |
+          build/mscz2media testdata/repeat-test.mscz --resources resources --out build/out --drawdata
+          test -s build/out/page-1.drawdata.json
