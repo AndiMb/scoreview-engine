@@ -22,6 +22,7 @@
 #include "engraving/dom/masterscore.h"
 #include "engraving/dom/page.h"
 #include "engraving/rendering/score/scorerenderer.h"
+#include "meta/scoremeta.h"
 #include "positions/positionswriter.h"
 #include "shadow/exportmidi.h"
 #include "utils/scorerw.h"
@@ -39,7 +40,8 @@ static int usage()
                 "  --drawdata         write page-<n>.drawdata.json per page\n"
                 "  --midi             write score.mid (repeats expanded, RPNs exported)\n"
                 "  --spos             write spos.json (segment positions + playback events)\n"
-                "  --mpos             write mpos.json (measure positions + playback events)\n");
+                "  --mpos             write mpos.json (measure positions + playback events)\n"
+                "  --meta             write meta.json (score metadata; tracks always empty)\n");
     return 2;
 }
 
@@ -50,6 +52,7 @@ int main(int argc, char** argv)
     bool wantMidi = false;
     bool wantSpos = false;
     bool wantMpos = false;
+    bool wantMeta = false;
 
     for (int i = 1; i < argc; ++i) {
         if (!std::strcmp(argv[i], "--resources") && i + 1 < argc) {
@@ -64,6 +67,8 @@ int main(int argc, char** argv)
             wantSpos = true;
         } else if (!std::strcmp(argv[i], "--mpos")) {
             wantMpos = true;
+        } else if (!std::strcmp(argv[i], "--meta")) {
+            wantMeta = true;
         } else if (argv[i][0] == '-') {
             return usage();
         } else {
@@ -88,7 +93,7 @@ int main(int argc, char** argv)
     std::printf("pages=%zu measures=%zu tracks=%zu\n",
                 score->npages(), score->nmeasures(), score->ntracks());
 
-    if (wantDrawData || wantMidi || wantSpos || wantMpos) {
+    if (wantDrawData || wantMidi || wantSpos || wantMpos || wantMeta) {
         std::filesystem::create_directories(outDir);
     }
 
@@ -104,6 +109,11 @@ int main(int argc, char** argv)
         return true;
     };
 
+    if (wantMeta) {
+        if (!writeBytes("meta.json", sve::ScoreMeta::json(score))) {
+            return 1;
+        }
+    }
     if (wantSpos) {
         sve::PositionsWriter writer(sve::PositionsWriter::ElementType::SEGMENT);
         if (!writeBytes("spos.json", writer.json(score))) {

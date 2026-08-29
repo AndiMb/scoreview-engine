@@ -93,6 +93,7 @@ add_library(sve_engine STATIC
     src/shadow/midifile.cpp
     src/shadow/exportmidi.cpp
     src/positions/positionswriter.cpp
+    src/meta/scoremeta.cpp
     ${MU_ROOT}/src/engraving/internal/engravingfont.cpp
     ${FONTSTACK_SRC}
 )
