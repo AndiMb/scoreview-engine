@@ -5,9 +5,12 @@ engine for [ScoreView](https://github.com/AndiMb/scoreview). Takes `.mscz`
 files and produces SVG pages, MIDI, playback positions (spos/mpos) and
 metadata JSON. No Qt, no audio synthesis, no UI.
 
-**Status: scaffold.** This repository implements the plan in
-`webmscore-fork/docs/qtfree-plan.md`; currently Phase 2 (native Qt-free
-library + `mscz2media` CLI) is being productized from the 2026-08-28 spike.
+**Status: Phase 3.** This repository implements the plan in
+`webmscore-fork/docs/qtfree-plan.md`. Phase 2 (native library + `mscz2media`
+CLI, corpus-gated against the released Qt webmscore) is accepted; the
+DrawData→SVG writer is in place — text as glyph outlines (`<defs>`/`<use>`),
+identity stamping (`class="Type seg-N st-N vc-N"`) compatible with the
+webmscore fork's SVG output.
 
 ## Architecture
 
@@ -45,7 +48,7 @@ when upstream drifts.
     # convert the checked-in test score:
     docker run --rm -v "$(pwd):/src:ro" -v sve-build:/build scoreview-engine-build \
         /build/mscz2media /src/testdata/repeat-test.mscz --resources /src/resources \
-        --out /build/out --drawdata
+        --out /build/out --svg --midi --spos --mpos --meta
 
 `prefetch/` carries the HarfBuzz source archive from muse_deps because the
 download host resolves IPv6-only and fails inside containers. `resources/`

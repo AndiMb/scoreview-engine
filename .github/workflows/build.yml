@@ -36,8 +36,9 @@ jobs:
 
       - name: Convert test score
         run: |
-          build/mscz2media testdata/repeat-test.mscz --resources resources --out build/out --drawdata --midi --spos --mpos --meta
+          build/mscz2media testdata/repeat-test.mscz --resources resources --out build/out --drawdata --midi --spos --mpos --meta --svg
           test -s build/out/page-1.drawdata.json
+          test -s build/out/page-1.svg
 
       # The corpus gate: fingerprints of MIDI, spos/mpos and metadata for all
       # vtest scores must match the released Qt webmscore (baseline in

@@ -16,6 +16,8 @@ Current shadow copies:
 | `engravingfontsprovider.cpp` | `src/engraving/internal/engravingfontsprovider.cpp` | one line: `dirpath(filePath)` instead of `dirpath(filePath.toQString())` |
 | `midifile.h` / `midifile.cpp` | `src/importexport/midi/internal/midishared/midifile.{h,cpp}` | `QIODevice` → `muse::io::IODevice`, `qint64` → `int64_t`, `putChar` → `put`; the MIDI *import* path is not carried over; supplies Qt's `uchar` typedef for `midievent.h` (included unmodified, pinned) |
 | `exportmidi.h` / `exportmidi.cpp` | `src/importexport/midi/internal/midiexport/exportmidi.{h,cpp}` | `QIODevice` → `muse::io::IODevice`, `QString`/`QFile` overloads dropped, `qPrintable` → `muse::String` |
+| `fontsengine.h` / `fontsengine.cpp` | `src/framework/draw/internal/fontsengine.{h,cpp}` | added `GlyphRun`/`glyphRuns()` — render()'s loop yielding glyph identities and pen positions instead of SDF bitmaps, for the SVG writer; still compiled with the forced prelude |
+| `fontprovider.cpp` | `src/framework/draw/internal/fontprovider.cpp` | every Font rescaled ×(1200/360) before reaching the FontsEngine — the metrics-side twin of `Painter::applyFontSizeScaling`; without it text is measured 10/3 too narrow (the Duckwerk page-count class) |
 
 ## Drift guard
 

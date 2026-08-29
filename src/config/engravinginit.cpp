@@ -7,7 +7,7 @@
 
 #include "types/fontstypes.h"
 #include "internal/fontsdatabase.h"
-#include "internal/fontsengine.h"
+#include "shadow/fontsengine.h"
 #include "internal/fontprovider.h"
 
 #include "engraving/internal/engravingfontsprovider.h"

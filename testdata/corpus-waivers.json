@@ -1,21 +1,15 @@
 {
-  "_comment": "Known, deliberate deviations from the Qt baseline (testdata/corpus-baseline.json). Every entry is Phase-4 work: either fix the divergence or rebaseline it with a recorded reason. Fields: pages/measures/parts/posElements/posMeasures/segElements/midiBytes, error, meta.<key>. Recorded 2026-08-29 from the first full native corpus run (567/569 converted, 554 byte-identical fingerprints).",
+  "_comment": "Known, deliberate deviations from the Qt baseline (testdata/corpus-baseline.json). Every entry is Phase-4 work: either fix the divergence or rebaseline it with a recorded reason. Fields: pages/measures/parts/posElements/posMeasures/segElements/midiBytes, error, meta.<key>. Updated 2026-08-29 after the engraving-DPI metrics fix (shadow fontprovider.cpp): all 569 scores convert; the fix cleared the chordline NaN asserts and the fret-box/harmony-35 page counts, and moved bigTimeSig-3/4 and vibrato-1 onto the other side of a page boundary.",
+  "bigTimeSig-3.mscz": {
+    "pages": "page-boundary case: HarfBuzz/FreeType metrics run slightly wider than Qt's (1 page Qt -> 2 native)",
+    "meta.pages": "follows pages"
+  },
+  "bigTimeSig-4.mscz": {
+    "pages": "page-boundary case (1 page Qt -> 2 native)",
+    "meta.pages": "follows pages"
+  },
   "breath-4.mscz": {
     "meta.duration": "duration differs with breath/caesura pauses (19s Qt -> 23s native)"
-  },
-  "chordline-2.mscz": {
-    "error": "NaN assertion in debug layout (muse::check_valid); the release Qt build converts silently"
-  },
-  "chordline-3.mscz": {
-    "error": "NaN assertion in debug layout (muse::check_valid); the release Qt build converts silently"
-  },
-  "fret-box.mscz": {
-    "pages": "text-metric page count (Duckwerk class: HarfBuzz/FreeType vs Qt horizontal measurement)",
-    "meta.pages": "follows pages"
-  },
-  "harmony-35.mscz": {
-    "pages": "text-metric page count (Duckwerk class)",
-    "meta.pages": "follows pages"
   },
   "partials.mscz": {
     "meta.duration": "duration differs (18s Qt -> 14s native)"
@@ -30,7 +24,11 @@
     "meta.duration": "duration differs (53s Qt -> 26s native)"
   },
   "text-line-scaling.mscz": {
-    "pages": "text-metric page count (Duckwerk class)",
+    "pages": "page-boundary case (1 page Qt -> 2 native)",
+    "meta.pages": "follows pages"
+  },
+  "vibrato-1.mscz": {
+    "pages": "page-boundary case (1 page Qt -> 2 native)",
     "meta.pages": "follows pages"
   },
   "volta-1.mscz": {

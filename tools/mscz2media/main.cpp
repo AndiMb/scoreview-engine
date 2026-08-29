@@ -25,6 +25,7 @@
 #include "meta/scoremeta.h"
 #include "positions/positionswriter.h"
 #include "shadow/exportmidi.h"
+#include "svg/svgwriter.h"
 #include "utils/scorerw.h"
 
 using namespace muse;
@@ -41,7 +42,8 @@ static int usage()
                 "  --midi             write score.mid (repeats expanded, RPNs exported)\n"
                 "  --spos             write spos.json (segment positions + playback events)\n"
                 "  --mpos             write mpos.json (measure positions + playback events)\n"
-                "  --meta             write meta.json (score metadata; tracks always empty)\n");
+                "  --meta             write meta.json (score metadata; tracks always empty)\n"
+                "  --svg              write page-<n>.svg per page (text as glyph outlines)\n");
     return 2;
 }
 
@@ -53,6 +55,7 @@ int main(int argc, char** argv)
     bool wantSpos = false;
     bool wantMpos = false;
     bool wantMeta = false;
+    bool wantSvg = false;
 
     for (int i = 1; i < argc; ++i) {
         if (!std::strcmp(argv[i], "--resources") && i + 1 < argc) {
@@ -69,6 +72,8 @@ int main(int argc, char** argv)
             wantMpos = true;
         } else if (!std::strcmp(argv[i], "--meta")) {
             wantMeta = true;
+        } else if (!std::strcmp(argv[i], "--svg")) {
+            wantSvg = true;
         } else if (argv[i][0] == '-') {
             return usage();
         } else {
@@ -93,7 +98,7 @@ int main(int argc, char** argv)
     std::printf("pages=%zu measures=%zu tracks=%zu\n",
                 score->npages(), score->nmeasures(), score->ntracks());
 
-    if (wantDrawData || wantMidi || wantSpos || wantMpos || wantMeta) {
+    if (wantDrawData || wantMidi || wantSpos || wantMpos || wantMeta || wantSvg) {
         std::filesystem::create_directories(outDir);
     }
 
@@ -108,6 +113,19 @@ int main(int argc, char** argv)
         std::printf("wrote %s (%zu bytes)\n", outPath.c_str(), data.size());
         return true;
     };
+
+    if (wantSvg) {
+        for (size_t pageNo = 0; pageNo < score->npages(); ++pageNo) {
+            muse::ByteArray svg = sve::SvgWriter::write(score, pageNo);
+            if (svg.empty()) {
+                std::fprintf(stderr, "mscz2media: no SVG for page %zu\n", pageNo + 1);
+                return 1;
+            }
+            if (!writeBytes("page-" + std::to_string(pageNo + 1) + ".svg", svg)) {
+                return 1;
+            }
+        }
+    }
 
     if (wantMeta) {
         if (!writeBytes("meta.json", sve::ScoreMeta::json(score))) {

@@ -74,17 +74,18 @@ set(ENGRAVING_NO_ACCESSIBILITY ON)
 add_subdirectory(${MU_ROOT}/src/engraving engraving)
 
 # The internal draw sources, unmodified from the submodule, compiled without
-# the Qt defines. fontsengine.cpp needs the prelude header — see
-# src/shadow/fontsengine_prelude.h.
-set_source_files_properties(${MU_ROOT}/src/framework/draw/internal/fontsengine.cpp
+# the Qt defines. fontsengine.{h,cpp} are shadow copies (glyphRuns addition
+# for the SVG writer) and keep the forced prelude header — see
+# src/shadow/fontsengine_prelude.h and src/shadow/README.md.
+set_source_files_properties(src/shadow/fontsengine.cpp
     PROPERTIES COMPILE_OPTIONS "-include;${CMAKE_CURRENT_LIST_DIR}/src/shadow/fontsengine_prelude.h")
 
 set(FONTSTACK_SRC
-    ${MU_ROOT}/src/framework/draw/internal/fontsengine.cpp
+    src/shadow/fontsengine.cpp
     ${MU_ROOT}/src/framework/draw/internal/fontfaceft.cpp
     ${MU_ROOT}/src/framework/draw/internal/fontfacedu.cpp
     ${MU_ROOT}/src/framework/draw/internal/fontsdatabase.cpp
-    ${MU_ROOT}/src/framework/draw/internal/fontprovider.cpp
+    src/shadow/fontprovider.cpp
 )
 
 add_library(sve_engine STATIC
@@ -94,6 +95,8 @@ add_library(sve_engine STATIC
     src/shadow/exportmidi.cpp
     src/positions/positionswriter.cpp
     src/meta/scoremeta.cpp
+    src/svg/drawdatasvg.cpp
+    src/svg/svgwriter.cpp
     ${MU_ROOT}/src/engraving/internal/engravingfont.cpp
     ${FONTSTACK_SRC}
 )

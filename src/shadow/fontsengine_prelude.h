@@ -7,9 +7,10 @@
 // 9a05283009 (fontsengine.cpp lines 44-60); "mu::" is the old namespace from
 // before the muse rename.
 //
-// Force-included (per -include) only for fontsengine.cpp, which is compiled
-// unmodified from the submodule. The drift guard pins that file's blob id:
-// if upstream ever touches fontsengine.cpp, this prelude must be re-checked.
+// Force-included (per -include) only for the shadow copy of fontsengine.cpp
+// (src/shadow/fontsengine.cpp), keeping the copy's diff against upstream
+// minimal. The drift guard pins the upstream file's blob id: if upstream ever
+// touches fontsengine.cpp, both the copy and this prelude must be re-checked.
 
 #include "global/types/bytearray.h"
 #include "draw/types/geometry.h"
