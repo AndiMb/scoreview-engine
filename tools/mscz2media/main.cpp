@@ -21,6 +21,8 @@
 
 #include "engraving/dom/masterscore.h"
 #include "engraving/dom/page.h"
+#include "engraving/dom/repeatlist.h"
+#include "engraving/dom/tempo.h"
 #include "engraving/rendering/score/scorerenderer.h"
 #include "meta/scoremeta.h"
 #include "positions/positionswriter.h"
@@ -43,7 +45,8 @@ static int usage()
                 "  --spos             write spos.json (segment positions + playback events)\n"
                 "  --mpos             write mpos.json (measure positions + playback events)\n"
                 "  --meta             write meta.json (score metadata; tracks always empty)\n"
-                "  --svg              write page-<n>.svg per page (text as glyph outlines)\n");
+                "  --svg              write page-<n>.svg per page (text as glyph outlines)\n"
+                "  --dump-playback    print tempomap and expanded repeat list (diagnostics)\n");
     return 2;
 }
 
@@ -56,6 +59,7 @@ int main(int argc, char** argv)
     bool wantMpos = false;
     bool wantMeta = false;
     bool wantSvg = false;
+    bool wantDumpPlayback = false;
 
     for (int i = 1; i < argc; ++i) {
         if (!std::strcmp(argv[i], "--resources") && i + 1 < argc) {
@@ -74,6 +78,8 @@ int main(int argc, char** argv)
             wantMeta = true;
         } else if (!std::strcmp(argv[i], "--svg")) {
             wantSvg = true;
+        } else if (!std::strcmp(argv[i], "--dump-playback")) {
+            wantDumpPlayback = true;
         } else if (argv[i][0] == '-') {
             return usage();
         } else {
@@ -95,8 +101,29 @@ int main(int argc, char** argv)
         return 1;
     }
 
+    // Desktop and webmscore both run Score::update() after the initial layout
+    // (via NotationProject setup / webmscore's _doLoad). If the layout added
+    // elements that request a tempomap rebuild (courtesy time signatures do),
+    // that pass wipes the volta tempo entries Volta::setTempo() planted during
+    // layout — so without it the exported MIDI carries extra tempo events the
+    // Qt pipeline doesn't have (vtest: volta-1/2, slurs-30).
+    score->update();
+
     std::printf("pages=%zu measures=%zu tracks=%zu\n",
                 score->npages(), score->nmeasures(), score->ntracks());
+
+    if (wantDumpPlayback) {
+        std::printf("tempomap (multiplier=%f):\n", score->tempomap()->tempoMultiplier().val);
+        for (const auto& e : *score->tempomap()) {
+            std::printf("  tick=%d tempo=%f pause=%f type=%d\n",
+                        e.first, e.second.tempo.val, e.second.pause, static_cast<int>(e.second.type));
+        }
+        std::printf("repeatList(expand=true):\n");
+        for (const RepeatSegment* rs : score->repeatList(true)) {
+            std::printf("  utick=%d tick=%d len=%d utime=%f timeOffset=%f\n",
+                        rs->utick, rs->tick, rs->len(), rs->utime, rs->timeOffset);
+        }
+    }
 
     if (wantDrawData || wantMidi || wantSpos || wantMpos || wantMeta || wantSvg) {
         std::filesystem::create_directories(outDir);

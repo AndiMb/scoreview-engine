@@ -1,40 +1,31 @@
 {
-  "_comment": "Known, deliberate deviations from the Qt baseline (testdata/corpus-baseline.json). Every entry is Phase-4 work: either fix the divergence or rebaseline it with a recorded reason. Fields: pages/measures/parts/posElements/posMeasures/segElements/midiBytes, error, meta.<key>. Updated 2026-08-29 after the engraving-DPI metrics fix (shadow fontprovider.cpp): all 569 scores convert; the fix cleared the chordline NaN asserts and the fret-box/harmony-35 page counts, and moved bigTimeSig-3/4 and vibrato-1 onto the other side of a page boundary.",
+  "_comment": "Known, deliberate deviations from the Qt baseline (testdata/corpus-baseline.json). Every entry records a Phase-4 decision: the divergence was root-caused and the native value kept on purpose. Ground truth throughout is desktop MuseScore Studio 4.7.4 (--score-meta / MIDI export on the same scores). Updated 2026-08-29, Phase 4: the volta/slurs midiBytes waivers are gone (mscz2media now runs Score::update() after layout, matching the desktop/webmscore pipeline; exports are byte-identical); the duration waivers stay because the *baseline* is wrong: webmscore computes saveMetadata().duration from a stale repeat-list cache (Score::duration() mixes repeatList(true) with the expandRepeats-flag-dependent repeatList() inside utick2utime) - calling saveMidi first flips webmscore to the desktop values, which are exactly what the native engine reports. bigTimeSig-3/4 stay because desktop lays them out at 2 pages like the native engine; the Qt-webmscore 1-page count is the outlier. vibrato-1 and text-line-scaling are genuine native deviations: a tight system-break flips on sub-percent glyph-advance differences (HarfBuzz/FreeType vs Qt measures e.g. the guitarVibrato wiggle at 246.83 vs 247.61 units), pushing one measure to the next system and the last system to page 2; desktop agrees with Qt here.",
   "bigTimeSig-3.mscz": {
-    "pages": "page-boundary case: HarfBuzz/FreeType metrics run slightly wider than Qt's (1 page Qt -> 2 native)",
+    "pages": "desktop 4.7.4 lays out 2 pages, same as native; the Qt-webmscore 1-page baseline is the outlier",
     "meta.pages": "follows pages"
   },
   "bigTimeSig-4.mscz": {
-    "pages": "page-boundary case (1 page Qt -> 2 native)",
+    "pages": "desktop 4.7.4 lays out 2 pages, same as native; the Qt-webmscore 1-page baseline is the outlier",
     "meta.pages": "follows pages"
   },
   "breath-4.mscz": {
-    "meta.duration": "duration differs with breath/caesura pauses (19s Qt -> 23s native)"
+    "meta.duration": "native 23s matches desktop 4.7.4; the 19s baseline is webmscore's stale-cache duration (breath pauses missing from the cached repeat-list times)"
   },
   "partials.mscz": {
-    "meta.duration": "duration differs (18s Qt -> 14s native)"
+    "meta.duration": "native 14s matches desktop 4.7.4; the 18s baseline is webmscore's stale-cache duration"
   },
   "partials2.mscz": {
-    "meta.duration": "duration differs (18s Qt -> 14s native)"
-  },
-  "slurs-30.mscz": {
-    "midiBytes": "small MIDI event delta (208 -> 215 bytes)"
+    "meta.duration": "native 14s matches desktop 4.7.4; the 18s baseline is webmscore's stale-cache duration"
   },
   "stacking-order.mscz": {
-    "meta.duration": "duration differs (53s Qt -> 26s native)"
+    "meta.duration": "native 26s matches desktop 4.7.4; the 53s baseline is webmscore's stale-cache duration (expanded utick looked up in the non-expanded list)"
   },
   "text-line-scaling.mscz": {
-    "pages": "page-boundary case (1 page Qt -> 2 native)",
+    "pages": "tight system-break flip from sub-percent HarfBuzz-vs-Qt advance differences: native fits 20 instead of 22 measures on the single system (1 page Qt/desktop -> 2 native)",
     "meta.pages": "follows pages"
   },
   "vibrato-1.mscz": {
-    "pages": "page-boundary case (1 page Qt -> 2 native)",
+    "pages": "tight system-break flip from sub-percent HarfBuzz-vs-Qt advance differences: system 2 fits 6 instead of 7 measures (1 page Qt/desktop -> 2 native)",
     "meta.pages": "follows pages"
-  },
-  "volta-1.mscz": {
-    "midiBytes": "MIDI event delta on volta repeats (111 -> 126 bytes)"
-  },
-  "volta-2.mscz": {
-    "midiBytes": "MIDI event delta on volta repeats (155 -> 184 bytes)"
   }
 }
