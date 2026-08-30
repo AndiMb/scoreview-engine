@@ -7,3 +7,12 @@ e5423e4b7ab02cb0e0f27b99f2ff2b123836e438 src/importexport/midi/internal/midishar
 e2cfe85c044ae6ef1ed0d068dd5ec905b36fbdb7 src/importexport/midi/internal/midishared/midievent.h
 adb88433950c794afc7432400c115dc64e458b8e src/framework/draw/internal/fontsengine.h
 c90ab68726009aa0640958df654bae2712cded18 src/framework/draw/internal/fontprovider.cpp
+56f443751b73ff3622b88a6e68a36ca5f7564e91 src/engraving/data/styles/legacy-style-defaults-v1.mss
+d0feee4eb448b2a4e875b75d49f93072f52fc4a3 src/engraving/data/styles/legacy-style-defaults-v2.mss
+0cce56826f45919b522163a019d12bcd774f6519 src/engraving/data/styles/legacy-style-defaults-v3.mss
+1fdff5e65f40d1262d59037eb3875fbb2db2d28e src/engraving/data/styles/legacy-style-defaults-v302.mss
+32ad585720aac819e7dda28d180262a2c35e0c69 src/engraving/data/styles/legacy-style-defaults-v450.mss
+9ac11c773011534eaf05abb0102177b50d5f2490 src/engraving/data/chords/chords_legacy.xml
+7e367b0d3aa0fba5565f0f8c6cf1a29757c36965 src/engraving/data/chords/stdchords.xml
+922ac0064838c6d580c61e44adb4a19b81715aab src/engraving/data/chords/chords_std.xml
+b85fe19ed5dde728f879778a1708468f9f28c96d share/instruments/instruments.xml

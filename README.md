@@ -30,7 +30,7 @@ when upstream drifts.
     │   ├── positions/        # spos/mpos writer from layout data
     │   ├── meta/             # metadata JSON writer
     │   └── api/              # the one score loader both builds use
-    ├── resources/            # fonts (woff2) + SMuFL metadata (replaces the qrc)
+    ├── resources/            # fonts (woff2), SMuFL metadata, styles (replaces the qrc)
     ├── web/                  # wasm entry (C ABI + WasmRes wire format)
     ├── web-public/           # JS wrapper (webmscore-compatible subset, no audio)
     ├── testdata/             # corpus baseline and waivers, two test scores
@@ -54,6 +54,14 @@ when upstream drifts.
   size the layout needs, the original bytes go into an `<image>` data URI. PNG,
   JPEG, GIF and BMP; the two formats MuseScore accepts and a browser cannot
   show (TIFF, and SVG-in-score, which needs `QSvgRenderer`) draw nothing.
+* **Scores older than 4.0** are engraved with the style defaults of their era:
+  `resources/engraving/styles/` carries the `legacy-style-defaults-v*.mss`
+  MuseScore loads for them, and the two chord description files they name.
+  What those defaults ask for and this build does not carry is the symbol font
+  of the era (Emmentaler, MScore Text) — the glyphs come from Bravura instead,
+  the way any missing font falls back. Only the outlines change: the style
+  value stays `Emmentaler`, so the layout rules that branch on it
+  (`bracket.cpp`, `tlayout.cpp`) take the same path they take in MuseScore.
 
 ## From `.mscz` to SVG
 

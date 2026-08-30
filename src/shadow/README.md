@@ -27,11 +27,22 @@ copy is not built at all, so there is nothing upstream left to drift against.
 Its version is now watched where the other dependencies are watched —
 `tools/deps.json` and `tools/check-deps.py`, see `docs/dependencies.md`.
 
+## Copied data files
+
+`resources/` stands in for MuseScore's qrc tree, and part of it is plain
+upstream data copied verbatim (only CRLF normalized to LF): the instrument
+templates, the chord description files, and the per-era style defaults
+MuseScore applies to scores written before 4.0. Nothing compiles them, so a
+compiler never notices when upstream edits one — a stale copy would simply
+engrave old scores by yesterday's rules, silently. They are therefore pinned
+the same way the shadow copies are.
+
 ## Drift guard
 
-`upstream.lock` pins the git blob id of every upstream counterpart (shadow
-copies and prelude targets). `tools/check-shadow-drift.sh`
-verifies the pins against the submodule and fails when upstream drifts — CI
-runs it on every build. When it fires: re-derive the shadow copy / re-check
-the prelude against the new upstream file, then update the lock with the new
-blob id (`git -C musescore rev-parse HEAD:<path>`).
+`upstream.lock` pins the git blob id of every upstream file this repository
+carries a copy of — shadow copies, prelude targets, and the data files under
+`resources/`. `tools/check-shadow-drift.sh` verifies the pins against the
+submodule and fails when upstream drifts — CI runs it on every build. When it
+fires: re-derive the shadow copy, re-check the prelude, or re-copy the data
+file against the new upstream, then update the lock with the new blob id
+(`git -C musescore rev-parse HEAD:<path>`).
