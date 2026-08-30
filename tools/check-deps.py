@@ -165,19 +165,39 @@ def verify_component(c, online):
         got = found.pop()
         return ("ok" if got == declared else "mismatch"), got, ", ".join(rule["files"])
 
-    if kind == "submodule-tag":
+    if kind == "submodule-pin":
+        # Not `git describe`: actions/checkout clones the submodule shallow
+        # (.gitmodules says so), which leaves it without tags, and describe
+        # then answers with a commit hash. The version the build actually
+        # compiles is the one written in the submodule's own version file, and
+        # that is readable however the checkout was made.
         sub = ROOT / rule["path"]
-        if not (sub / ".git").exists():
-            # A clone without --recursive, or the weekly job, which has no
-            # reason to pull 800 MB of submodule to read a version.
+        vfile = sub / rule["version_file"]
+        if not vfile.exists():
             return "skip", None, f"{rule['path']} not checked out"
-        r = run(["git", "describe", "--tags", "--always"], cwd=sub)
-        if r.returncode == 127:
-            return "skip", None, "no git available to read the submodule tag"
-        if r.returncode != 0:
-            return "error", None, r.stderr.strip()[:200]
-        found = r.stdout.strip().lstrip("v")
-        return ("ok" if found == declared else "mismatch"), found, rule["path"]
+        txt = vfile.read_text(encoding="utf-8", errors="replace")
+        parts = []
+        for pattern in rule["patterns"]:
+            m = re.search(pattern, txt)
+            if not m:
+                return "error", None, f"{pattern!r} not found in {rule['version_file']}"
+            parts.append(m.group(1))
+        found = rule.get("join", ".").join(parts)
+        if found != declared:
+            return "mismatch", found, rule["version_file"]
+
+        # The version string alone would not notice the submodule being moved
+        # to a different commit that happens to carry the same version, so the
+        # pin is checked too where git can answer.
+        want = rule.get("commit")
+        if want:
+            r = run(["git", "ls-tree", "HEAD", rule["path"]])
+            if r.returncode == 0 and r.stdout.strip():
+                got = r.stdout.split()[2]
+                if got != want:
+                    return "mismatch", f"{found} @ {got[:8]}", f"pin expected {want[:8]}"
+                return "ok", f"{found} @ {got[:8]}", rule["version_file"]
+        return "ok", found, rule["version_file"]
 
     if kind == "npm-lock":
         lock = json.loads((ROOT / rule["lock"]).read_text(encoding="utf-8"))

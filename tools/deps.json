@@ -13,7 +13,18 @@
       "version": "4.7.4",
       "kind": "submodule",
       "location": "musescore",
-      "verify": { "rule": "submodule-tag", "path": "musescore" },
+      "verify": {
+        "rule": "submodule-pin",
+        "path": "musescore",
+        "commit": "7688c005ad963ba09ee715aae53dbc7e8c9d5ef8",
+        "version_file": "version.cmake",
+        "patterns": [
+          "MUSE_APP_VERSION_MAJOR\\s+\"([0-9]+)\"",
+          "MUSE_APP_VERSION_MINOR\\s+\"([0-9]+)\"",
+          "MUSE_APP_VERSION_PATCH\\s+\"([0-9]+)\""
+        ],
+        "join": "."
+      },
       "watch": { "rule": "github-release", "repo": "musescore/MuseScore", "strip": "v" },
       "cpe": "cpe:2.3:a:musescore:musescore",
       "note": "A bump re-runs the corpus gate and re-derives every shadow copy (src/shadow/README.md). Not automatable."
