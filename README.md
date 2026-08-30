@@ -87,7 +87,7 @@ page (`testdata/corpus-waivers.json`).
 ## Building (native, Docker)
 
     git clone --recurse-submodules <this repo>   # submodule is shallow, clones fast
-    tools/build-native-docker.sh                 # ubuntu-22.04/g++-10, build tree in volume sve-build
+    tools/build-native-docker.sh                 # ubuntu-24.04/g++-10, build tree in volume sve-build
 
     # convert the checked-in test score:
     docker run --rm -v "$(pwd):/src:ro" -v sve-build:/build scoreview-engine-build \

@@ -6,7 +6,7 @@ on:
 
 jobs:
   native:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
         with:
@@ -66,7 +66,7 @@ jobs:
   # The wasm gate: the wasm build must reproduce the native fingerprints
   # exactly (same loader, same writers — any diff is a wasm-side bug).
   wasm:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     needs: native
     steps:
       - uses: actions/checkout@v7
@@ -79,15 +79,18 @@ jobs:
           cp prefetch/* build-wasm/_deps/harfbuzz/
           cd build-wasm/_deps/harfbuzz && cmake -E tar xf harfbuzz_src.7z
 
+      # Plain docker run rather than a third-party action: this is one command,
+      # and addnab/docker-run-action — which used to wrap it — has had no
+      # release since 2021 and was referenced by a moving tag, with the
+      # workspace mounted into it. Same invocation as tools/build-wasm-docker.sh.
       - name: Build wasm
-        uses: addnab/docker-run-action@v3
-        with:
-          image: emscripten/emsdk:4.0.7
-          options: -v ${{ github.workspace }}:/src
-          run: |
+        run: |
+          docker run --rm -v "${{ github.workspace }}:/src" emscripten/emsdk:4.0.7 bash -c '
+            set -e
             emcmake cmake -S /src -B /src/build-wasm -DCMAKE_BUILD_TYPE=Release
             cmake --build /src/build-wasm --target scoreview -- -j "$(nproc)"
             cp /src/build-wasm/scoreview.lib.js /src/build-wasm/scoreview.lib.wasm /src/build-wasm/scoreview.lib.data /src/web-public/
+          '
 
       - uses: actions/setup-node@v7
         with:
