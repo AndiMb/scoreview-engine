@@ -33,6 +33,13 @@ const char* WasmRes::reallocData(ByteArray data)
 {
     auto size = data.size() + 1;   // ByteArray guarantees a trailing '\0'
     auto buf = (char*)malloc(size);
+    if (!buf) {
+        // Out of heap. A null pointer is the only honest answer - the wrapper
+        // reads the block through it and checks for 0 (helper.js, class
+        // WasmRes); memcpy'ing into address 0 would corrupt the module's low
+        // memory instead.
+        return nullptr;
+    }
     memcpy(buf, data.constData(), size);
     return buf;
 }

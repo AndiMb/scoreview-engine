@@ -1,6 +1,7 @@
 #include "imageformat.h"
 
 #include <cstring>
+#include <limits>
 
 using namespace muse;
 
@@ -78,9 +79,12 @@ ImageFormat probeImage(const ByteArray& data)
             f = { "image/bmp", le16(p + 18), le16(p + 20) };
         } else if (headerSize >= 40) {          // BITMAPINFOHEADER and its successors
             // A negative height means the rows are stored top-down; the
-            // picture is as tall either way.
-            int32_t height = static_cast<int32_t>(le32(p + 22));
-            f = { "image/bmp", static_cast<int32_t>(le32(p + 18)), height < 0 ? -height : height };
+            // picture is as tall either way. INT32_MIN has no positive
+            // counterpart - negating it is undefined, so leave it at 0 and let
+            // the size check at the end reject the header.
+            int32_t raw = static_cast<int32_t>(le32(p + 22));
+            int height = raw == std::numeric_limits<int32_t>::min() ? 0 : (raw < 0 ? -raw : raw);
+            f = { "image/bmp", static_cast<int32_t>(le32(p + 18)), height };
         }
     }
 

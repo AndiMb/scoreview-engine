@@ -20,11 +20,21 @@ namespace sve {
 // trailing zeros — keeps files small and diffs readable.
 static std::string fmt(double v)
 {
+    // A degenerate coordinate must not make the whole page unparseable:
+    // "nan"/"inf" are not SVG numbers, and %.3f of a huge double would overrun
+    // the buffer and be truncated into a DIFFERENT number. Both collapse to 0,
+    // which costs one element and keeps the document valid.
+    if (!std::isfinite(v)) {
+        return "0";
+    }
     if (std::abs(v) < 1e-9) {
         return "0";
     }
     char buf[64];
-    std::snprintf(buf, sizeof(buf), "%.3f", v);
+    int written = std::snprintf(buf, sizeof(buf), "%.3f", v);
+    if (written < 0 || static_cast<size_t>(written) >= sizeof(buf)) {
+        return "0";
+    }
     std::string s(buf);
     while (!s.empty() && s.back() == '0') {
         s.pop_back();
@@ -120,6 +130,9 @@ static void pathData(std::ostream& os, const PainterPath& path)
             os << "L" << fmt(e.x) << " " << fmt(e.y);
             break;
         case PainterPath::ElementType::CurveToElement: {
+            if (i + 2 >= n) {
+                break;   // malformed path: the two CurveToData elements are missing
+            }
             PainterPath::Element c2 = path.elementAt(i + 1);
             PainterPath::Element end = path.elementAt(i + 2);
             os << "C" << fmt(e.x) << " " << fmt(e.y)
@@ -357,7 +370,11 @@ static void writeItem(std::ostream& os, SvgContext& ctx, const DrawData& dd, con
         if (data.empty()) {
             continue;
         }
-        const DrawData::State& state = dd.states.at(data.state);
+        const auto stateIt = dd.states.find(data.state);
+        if (stateIt == dd.states.end()) {
+            continue;   // no pen/brush/transform to draw this block with
+        }
+        const DrawData::State& state = stateIt->second;
         bool hasTransform = !isIdentity(state.transform);
         if (hasTransform) {
             os << "<g";

@@ -5,6 +5,8 @@
 
 #include "global/serialization/json.h"
 
+#include "log.h"
+
 #include "engraving/dom/masterscore.h"
 #include "engraving/dom/measure.h"
 #include "engraving/dom/page.h"
@@ -46,11 +48,17 @@ static void writeEventPosition(JsonArray& events, int id, int time)
 static void writeMeasureEvents(JsonArray& events, Measure* m, int offset, const std::unordered_map<const Segment*, int>& segments)
 {
     for (Segment* s = m->first(SegmentType::ChordRest); s; s = s->next(SegmentType::ChordRest)) {
+        // The index is built over the MM chain from firstMeasureMM; a segment
+        // the repeat walk reaches but the index does not know has no number to
+        // hand a player. Skip it rather than let at() throw across the C ABI.
+        const auto id = segments.find(s);
+        if (id == segments.end()) {
+            continue;
+        }
         int tick = s->tick().ticks() + offset;
-        int id = segments.at(s);
         int time = lrint(m->score()->repeatList().utick2utime(tick) * 1000);
 
-        writeEventPosition(events, id, time);
+        writeEventPosition(events, id->second, time);
     }
 }
 
@@ -86,16 +94,24 @@ static void writeSegmentsPositions(JsonObject& json, const Score* score)
             }
         }
 
-        double sy = segment->measure()->system()->height();
+        // Everything below is layout output. json() refuses a score that was
+        // never laid out; this guard covers the partially laid out one, where
+        // a measure can still sit on no system at all.
+        const System* system = segment->measure()->system();
+        const auto id = ids.find(segment);
+        if (!system || id == ids.end()) {
+            continue;
+        }
+
+        double sy = system->height();
 
         // truncated to int as in the fork's writer
         int x = segment->pagePos().x();
         int y = segment->pagePos().y();
 
-        Page* page = segment->measure()->system()->page();
-        page_idx_t pageIndex = score->pageIdx(page);
+        page_idx_t pageIndex = score->pageIdx(system->page());
 
-        writeElementPosition(elements, ids.at(segment), PointF(x, y), PointF(sx, sy), pageIndex);
+        writeElementPosition(elements, id->second, PointF(x, y), PointF(sx, sy), pageIndex);
     }
 
     json.set("elements", elements);
@@ -108,17 +124,24 @@ static void writeMeasuresPositions(JsonObject& json, const Score* score)
     JsonArray elements;
 
     for (Measure* measure = score->firstMeasureMM(); measure; measure = measure->nextMeasureMM()) {
+        // Consume the number even when the measure is skipped: writeEvents-
+        // Positions numbers the same chain unconditionally, and the two sides
+        // have to keep agreeing on which measure is which.
+        const int elementId = id++;
+
+        const System* system = measure->system();
+        if (!system) {
+            continue;
+        }
+
         double sx = measure->ldata() && measure->ldata()->isSetBbox() ? measure->ldata()->bbox().width() : 0.0;
-        double sy = measure->system()->height();
+        double sy = system->height();
         double x = measure->pagePos().x();
-        double y = measure->system()->pagePos().y();
+        double y = system->pagePos().y();
 
-        Page* page = measure->system()->page();
-        page_idx_t pageIndex = score->pageIdx(page);
+        page_idx_t pageIndex = score->pageIdx(system->page());
 
-        writeElementPosition(elements, id, PointF(x, y), PointF(sx, sy), pageIndex);
-
-        id++;
+        writeElementPosition(elements, elementId, PointF(x, y), PointF(sx, sy), pageIndex);
     }
 
     json.set("elements", elements);
@@ -149,11 +172,13 @@ static void writeEventsPositions(JsonObject& json, const Score* score, Positions
             if (elementType == PositionsWriter::ElementType::SEGMENT) {
                 writeMeasureEvents(events, measure, tickOffset, segmentIds);
             } else {
-                int tick = measure->tick().ticks() + tickOffset;
-                int id = measureIds.at(measure);
-                int time = std::lrint(measure->score()->repeatList().utick2utime(tick) * 1000);
+                const auto id = measureIds.find(measure);
+                if (id != measureIds.end()) {
+                    int tick = measure->tick().ticks() + tickOffset;
+                    int time = std::lrint(measure->score()->repeatList().utick2utime(tick) * 1000);
 
-                writeEventPosition(events, id, time);
+                    writeEventPosition(events, id->second, time);
+                }
             }
 
             if (measure->endTick().ticks() >= endTick) {
@@ -167,6 +192,16 @@ static void writeEventsPositions(JsonObject& json, const Score* score, Positions
 
 ByteArray PositionsWriter::json(const Score* score) const
 {
+    // Positions are layout data: every geometry read below goes through
+    // System*, which does not exist before doLayout(), and writePageSize wants
+    // a first page. load(..., doLayout: false) is a documented mode - answer
+    // emptily so the caller gets an error, not a wasm trap that unwinds
+    // without running a single destructor.
+    if (!score || score->pages().empty()) {
+        LOGW() << "no positions: the score has no layout";
+        return ByteArray();
+    }
+
     JsonObject json;
     if (m_elementType == ElementType::SEGMENT) {
         writeSegmentsPositions(json, score);

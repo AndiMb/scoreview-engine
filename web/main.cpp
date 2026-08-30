@@ -8,9 +8,11 @@
 #include <emscripten/emscripten.h>
 
 #include <cstdio>
+#include <exception>
 #include <fstream>
 #include <set>
 #include <string>
+#include <utility>
 
 #include <ft2build.h>
 #include FT_FREETYPE_H
@@ -59,6 +61,34 @@ static WasmRes badScorePtr()
     return WasmRes::error(static_cast<int>(Ret::Code::UnknownError), u"invalid score pointer");
 }
 
+static WasmRes notInited()
+{
+    return WasmRes::error(static_cast<int>(Ret::Code::InternalError),
+                          u"engine not initialised - init() failed, see the log");
+}
+
+// A C++ exception must not cross the C ABI: nothing on the other side can
+// catch it, so it would take the module down instead of reaching the wrapper,
+// which has a perfectly good error channel. Everything below that runs engine
+// code goes through here. Note this catches exceptions only - a wasm trap
+// (a null dereference, say) is not one, so the guards inside the writers stay
+// the first line of defence.
+template<typename Fn>
+static WasmRes guarded(const char* what, Fn&& fn)
+{
+    try {
+        return fn();
+    } catch (const std::exception& e) {
+        LOGE() << what << ": " << e.what();
+        return WasmRes::error(static_cast<int>(Ret::Code::InternalError),
+                              String(u"%1 failed: %2").arg(String::fromUtf8(what)).arg(String::fromUtf8(e.what())));
+    } catch (...) {
+        LOGE() << what << ": unknown exception";
+        return WasmRes::error(static_cast<int>(Ret::Code::InternalError),
+                              String(u"%1 failed: unknown exception").arg(String::fromUtf8(what)));
+    }
+}
+
 extern "C" {
 EMSCRIPTEN_KEEPALIVE
 int version()
@@ -72,19 +102,33 @@ void setLogLevel(int level)
     kors::logger::Logger::instance()->setLevel(static_cast<kors::logger::Level>(level));
 }
 
+//! Returns false when the engine could not be set up. The wrapper turns that
+//! into a rejected WebMscore.ready instead of letting every later call run
+//! against a half-registered IoC container.
 EMSCRIPTEN_KEEPALIVE
-void init(int, char**)
+bool init(int, char**)
 {
     if (s_inited) {
-        return;
+        return true;
     }
     // The preloaded package lands at /resources (see CMakeLists), standing in
     // for the qrc ":/" tree exactly as --resources does for the native CLI.
-    if (!sve::initEngraving("/resources")) {
+    bool ok = false;
+    try {
+        ok = sve::initEngraving("/resources");
+    } catch (const std::exception& e) {
+        LOGE() << "scoreview-engine: engine init threw: " << e.what();
+        return false;
+    } catch (...) {
+        LOGE() << "scoreview-engine: engine init threw";
+        return false;
+    }
+    if (!ok) {
         LOGE() << "scoreview-engine: engine init failed";
-        return;
+        return false;
     }
     s_inited = true;
+    return true;
 }
 
 EMSCRIPTEN_KEEPALIVE
@@ -156,30 +200,38 @@ bool addFont(const char* fontPath)
 EMSCRIPTEN_KEEPALIVE
 WasmResBytes load(const char* format, const char* data, const uint32_t size, bool doLayout)
 {
+    if (!s_inited) {
+        return notInited();
+    }
     std::string suffix(format);
     if (suffix != "mscz" && suffix != "mscx") {
         return notSupported("only mscz/mscx input is supported");
     }
 
-    // MEMFS temp file: cheap, and keeps the loader identical to the CLI's.
-    static int counter = 0;
-    std::string path = "/tmp/score-" + std::to_string(counter++) + "." + suffix;
-    {
-        std::ofstream f(path, std::ios::binary);
-        f.write(data, size);
-        if (!f) {
-            return WasmRes::error(static_cast<int>(Ret::Code::InternalError), u"cannot write temp file");
+    return guarded("load", [&]() -> WasmRes {
+        // MEMFS temp file: cheap, and keeps the loader identical to the CLI's.
+        static int counter = 0;
+        std::string path = "/tmp/score-" + std::to_string(counter++) + "." + suffix;
+        {
+            std::ofstream f(path, std::ios::binary);
+            f.write(data, size);
+            if (!f) {
+                // Remove here too: a partial write leaves the file behind, and
+                // MEMFS keeps it for the life of the module.
+                std::remove(path.c_str());
+                return WasmRes::error(static_cast<int>(Ret::Code::InternalError), u"cannot write temp file");
+            }
         }
-    }
 
-    MasterScore* score = sve::loadScore(io::path_t(path), doLayout);
-    std::remove(path.c_str());
-    if (!score) {
-        return WasmRes::error(static_cast<int>(Ret::Code::BadData), u"cannot load score");
-    }
+        MasterScore* score = sve::loadScore(io::path_t(path), doLayout);
+        std::remove(path.c_str());
+        if (!score) {
+            return WasmRes::error(static_cast<int>(Ret::Code::BadData), u"cannot load score");
+        }
 
-    s_instances.insert(score);
-    return WasmRes(static_cast<uint32_t>(reinterpret_cast<uintptr_t>(score)));
+        s_instances.insert(score);
+        return WasmRes(static_cast<uint32_t>(reinterpret_cast<uintptr_t>(score)));
+    });
 }
 
 EMSCRIPTEN_KEEPALIVE
@@ -189,7 +241,7 @@ WasmResBytes title(uintptr_t score_ptr)
     if (!score) {
         return badScorePtr();
     }
-    return WasmRes(sve::ScoreMeta::title(score));
+    return guarded("title", [&]() { return WasmRes(sve::ScoreMeta::title(score)); });
 }
 
 EMSCRIPTEN_KEEPALIVE
@@ -202,11 +254,11 @@ WasmResBytes npages(uintptr_t score_ptr, int excerptId)
     if (excerptId != -1) {
         return notSupported("excerpts");
     }
-    return WasmRes(static_cast<uint32_t>(score->npages()));
+    return guarded("npages", [&]() { return WasmRes(static_cast<uint32_t>(score->npages())); });
 }
 
 EMSCRIPTEN_KEEPALIVE
-WasmResBytes saveSvg(uintptr_t score_ptr, int pageNumber, bool /*drawPageBackground*/, int excerptId)
+WasmResBytes saveSvg(uintptr_t score_ptr, int pageNumber, bool drawPageBackground, int excerptId)
 {
     MasterScore* score = scoreOf(score_ptr);
     if (!score) {
@@ -215,11 +267,15 @@ WasmResBytes saveSvg(uintptr_t score_ptr, int pageNumber, bool /*drawPageBackgro
     if (excerptId != -1) {
         return notSupported("excerpts");
     }
-    ByteArray svg = sve::SvgWriter::write(score, static_cast<size_t>(pageNumber));
-    if (svg.empty()) {
-        return WasmRes::error(static_cast<int>(Ret::Code::UnknownError), u"no such page");
-    }
-    return WasmRes(svg);
+    return guarded("saveSvg", [&]() -> WasmRes {
+        sve::SvgWriter::Options opt;
+        opt.drawPageBackground = drawPageBackground;
+        ByteArray svg = sve::SvgWriter::write(score, static_cast<size_t>(pageNumber), opt);
+        if (svg.empty()) {
+            return WasmRes::error(static_cast<int>(Ret::Code::UnknownError), u"no such page");
+        }
+        return WasmRes(svg);
+    });
 }
 
 EMSCRIPTEN_KEEPALIVE
@@ -232,14 +288,16 @@ WasmResBytes saveMidi(uintptr_t score_ptr, bool midiExpandRepeats, bool exportRP
     if (excerptId != -1) {
         return notSupported("excerpts");
     }
-    io::Buffer buf;
-    buf.open(io::IODevice::ReadWrite);
-    mu::iex::midi::ExportMidi exportMidi(score);
-    exportMidi.write(&buf, midiExpandRepeats, exportRPNs, score->synthesizerState());
-    if (buf.data().empty()) {
-        return WasmRes::error(static_cast<int>(Ret::Code::UnknownError), u"MIDI export produced no data");
-    }
-    return WasmRes(buf.data());
+    return guarded("saveMidi", [&]() -> WasmRes {
+        io::Buffer buf;
+        buf.open(io::IODevice::ReadWrite);
+        mu::iex::midi::ExportMidi exportMidi(score);
+        exportMidi.write(&buf, midiExpandRepeats, exportRPNs, score->synthesizerState());
+        if (buf.data().empty()) {
+            return WasmRes::error(static_cast<int>(Ret::Code::UnknownError), u"MIDI export produced no data");
+        }
+        return WasmRes(buf.data());
+    });
 }
 
 EMSCRIPTEN_KEEPALIVE
@@ -252,9 +310,17 @@ WasmResBytes savePositions(uintptr_t score_ptr, bool ofSegments, int excerptId)
     if (excerptId != -1) {
         return notSupported("excerpts");
     }
-    sve::PositionsWriter writer(ofSegments ? sve::PositionsWriter::ElementType::SEGMENT
-                                           : sve::PositionsWriter::ElementType::MEASURE);
-    return WasmRes(writer.json(score));
+    return guarded("savePositions", [&]() -> WasmRes {
+        sve::PositionsWriter writer(ofSegments ? sve::PositionsWriter::ElementType::SEGMENT
+                                               : sve::PositionsWriter::ElementType::MEASURE);
+        ByteArray json = writer.json(score);
+        if (json.empty()) {
+            // The writer answers emptily for a score that was never laid out.
+            return WasmRes::error(static_cast<int>(Ret::Code::UnknownError),
+                                  u"no positions: the score was loaded with doLayout = false");
+        }
+        return WasmRes(json);
+    });
 }
 
 EMSCRIPTEN_KEEPALIVE
@@ -264,7 +330,7 @@ WasmResBytes saveMetadata(uintptr_t score_ptr)
     if (!score) {
         return badScorePtr();
     }
-    return WasmRes(sve::ScoreMeta::json(score));
+    return guarded("saveMetadata", [&]() { return WasmRes(sve::ScoreMeta::json(score)); });
 }
 
 EMSCRIPTEN_KEEPALIVE
@@ -275,14 +341,22 @@ void destroy(uintptr_t score_ptr)
         return;
     }
     s_instances.erase(score);
-    delete score;
+    try {
+        delete score;
+    } catch (...) {
+        LOGE() << "destroy: exception while releasing the score";
+    }
 }
 
 EMSCRIPTEN_KEEPALIVE
 void destroyAll()
 {
     for (MasterScore* score : s_instances) {
-        delete score;
+        try {
+            delete score;
+        } catch (...) {
+            LOGE() << "destroyAll: exception while releasing a score";
+        }
     }
     s_instances.clear();
 }

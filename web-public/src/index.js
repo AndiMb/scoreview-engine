@@ -29,6 +29,27 @@ export class NotSupportedError extends Error {
  */
 let _hasLogLevelSet = false
 
+/**
+ * Fonts already written into the virtual file system, by content key.
+ * @see WebMscore.addFont
+ */
+const _registeredFonts = new Set()
+
+/**
+ * FNV-1a over the font bytes. Only needs to separate different fonts from one
+ * another, never to resist anything.
+ * @param {Uint8Array} data
+ * @returns {string}
+ */
+const contentKey = (data) => {
+    let h = 0x811c9dc5
+    for (let i = 0; i < data.length; i++) {
+        h ^= data[i]
+        h = Math.imul(h, 0x01000193)
+    }
+    return (h >>> 0).toString(36)
+}
+
 class WebMscore {
 
     /**
@@ -108,17 +129,23 @@ class WebMscore {
             await WebMscore.addFont(f)
         }
 
+        let resptr
         const fileformatptr = getStrPtr(format)
-        const dataptr = getTypedArrayPtr(data)
-
-        // get the pointer to the MasterScore class instance in C
-        const resptr = Module.ccall('load',  // name of C function
-            'number',  // return type
-            ['number', 'number', 'number', 'boolean'],  // argument types
-            [fileformatptr, dataptr, data.byteLength, doLayout]  // arguments
-        )
-        freePtr(fileformatptr)
-        freePtr(dataptr)
+        try {
+            const dataptr = getTypedArrayPtr(data)
+            try {
+                // get the pointer to the MasterScore class instance in C
+                resptr = Module.ccall('load',  // name of C function
+                    'number',  // return type
+                    ['number', 'number', 'number', 'boolean'],  // argument types
+                    [fileformatptr, dataptr, data.byteLength, doLayout]  // arguments
+                )
+            } finally {
+                freePtr(dataptr)
+            }
+        } finally {
+            freePtr(fileformatptr)
+        }
         const scoreptr = WasmRes.readNum(resptr)
 
         if (!_hasLogLevelSet) {
@@ -141,11 +168,20 @@ class WebMscore {
      */
     static async addFont(font) {
         if (typeof font !== 'string') {
-            const name = 'font-' + Math.random()  // a random name
+            // Name the file after its content, not at random. The file has to
+            // stay - the fonts database records the path and loads the face
+            // lazily from it - so a random name meant `load()` dropped another
+            // copy of the same font into the virtual file system on every
+            // single call, for the life of the module.
+            const name = `font-${font.length}-${contentKey(font)}`
+            if (_registeredFonts.has(name)) {
+                return true
+            }
             // save the font data to the virtual file system. /tmp, not
             // /fonts as in webmscore: this build preloads its resources
             // under /resources and has no /fonts directory.
             Module['FS_createDataFile']('/tmp/', name, font, true, true)
+            _registeredFonts.add(name)
             font = '/tmp/' + name
         }
 
@@ -180,6 +216,18 @@ class WebMscore {
     }
 
     /**
+     * @private
+     * The engine hands a destroyed score's address straight back to the next
+     * `load()`, so the C side's pointer check cannot tell a stale handle from
+     * a live one - it would silently answer with someone else's score.
+     */
+    _checkAlive() {
+        if (this.destroyed) {
+            throw new Error('This score has been destroyed. Load it again to use it.')
+        }
+    }
+
+    /**
      * Only the full score is supported: `-1` passes, anything else throws
      * @param {number} id
      */
@@ -204,6 +252,7 @@ class WebMscore {
      * @returns {Promise<string>}
      */
     async title() {
+        this._checkAlive()
         const dataptr = Module.ccall('title', 'number', ['number'], [this.scoreptr])
         return WasmRes.readText(dataptr)
     }
@@ -221,6 +270,7 @@ class WebMscore {
      * @returns {Promise<number>}
      */
     async npages() {
+        this._checkAlive()
         const dataptr = Module.ccall('npages', 'number', ['number', 'number'], [this.scoreptr, this.excerptId])
         return WasmRes.readNum(dataptr)
     }
@@ -270,10 +320,13 @@ class WebMscore {
     /**
      * Export score as the SVG file of one page
      * @param {number} pageNumber integer
-     * @param {boolean} drawPageBackground ignored — the writer never paints a background
+     * @param {boolean} drawPageBackground paint a white rectangle over the page
+     *        rect before drawing. Off by default, as in webmscore: the pages
+     *        are meant to be composited by the caller.
      * @returns {Promise<string>} contents of the SVG file (plain text)
      */
     async saveSvg(pageNumber = 0, drawPageBackground = false) {
+        this._checkAlive()
         const dataptr = Module.ccall('saveSvg',
             'number',
             ['number', 'number', 'boolean', 'number'],
@@ -299,6 +352,7 @@ class WebMscore {
      * @returns {Promise<Uint8Array>}
      */
     async saveMidi(midiExpandRepeats = true, exportRPNs = true) {
+        this._checkAlive()
         const dataptr = Module.ccall('saveMidi',
             'number',
             ['number', 'boolean', 'boolean', 'number'],
@@ -349,11 +403,16 @@ class WebMscore {
 
     /**
      * Export positions of measures or segments (if `ofSegments` == true) as JSON
+     *
+     * Positions are layout data: this throws for a score loaded with
+     * `doLayout: false`, which has none.
+     *
      * @param {boolean} ofSegments
      * @also `score.measurePositions()` and `score.segmentPositions()`
      * @returns {Promise<string>}
      */
     async savePositions(ofSegments) {
+        this._checkAlive()
         const dataptr = Module.ccall('savePositions',
             'number',
             ['number', 'boolean', 'number'],
@@ -368,6 +427,7 @@ class WebMscore {
      * @returns {Promise<string>} contents of the JSON file
      */
     async saveMetadata() {
+        this._checkAlive()
         const dataptr = Module.ccall('saveMetadata', 'number', ['number'], [this.scoreptr])
         return WasmRes.readText(dataptr)
     }

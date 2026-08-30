@@ -19,7 +19,11 @@ class SvgWriter
 {
 public:
     struct Options {
-        bool drawPageBackground = true;
+        //! White rectangle over the page rect, before any element is drawn.
+        //! Off by default: pages are composited by the consumer, and
+        //! webmscore's saveSvg() defaults the same way. The wasm export passes
+        //! the caller's value through; the CLI takes this default.
+        bool drawPageBackground = false;
     };
 
     static muse::ByteArray write(mu::engraving::Score* score, size_t pageNumber);

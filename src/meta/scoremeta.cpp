@@ -46,6 +46,10 @@ static String recognizeTitle(const Score* score)
     }
 
     const Text* titleText = nullptr;
+    // DBL_MIN is the smallest POSITIVE double, not the most negative one, so
+    // this is not the "lowest possible" sentinel it looks like. Kept verbatim
+    // from upstream NotationMeta::recognizeTitle - font sizes are positive, so
+    // it behaves, and changing it would move the corpus baseline for nothing.
     double maxFontSize = DBL_MIN;
     double minY = DBL_MAX;
 
@@ -198,6 +202,8 @@ static String timesig(const Score* score)
     return timeSig;
 }
 
+// Note: no break - the LAST tempo text in the score wins, as in upstream
+// NotationMeta::tempo. Deliberate, and part of the baseline.
 static std::pair<int, String> tempo(const Score* score)
 {
     int tempo = 0;

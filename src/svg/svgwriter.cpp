@@ -52,6 +52,33 @@ static std::string classTag(const EngravingItem* e, const std::unordered_map<con
     return name;
 }
 
+// Printing mode is global state - the score's flag plus two MScore statics.
+// Restore it from a destructor: if painting throws, an early return would
+// otherwise leave every later export running in print mode.
+namespace {
+struct PrintingScope {
+    Score* score = nullptr;
+
+    explicit PrintingScope(Score* s)
+        : score(s)
+    {
+        score->setPrinting(true);   // don't print page break symbols etc.
+        MScore::pdfPrinting = true;
+        MScore::svgPrinting = true;
+    }
+
+    ~PrintingScope()
+    {
+        score->setPrinting(false);
+        MScore::pdfPrinting = false;
+        MScore::svgPrinting = false;
+    }
+
+    PrintingScope(const PrintingScope&) = delete;
+    PrintingScope& operator=(const PrintingScope&) = delete;
+};
+}
+
 ByteArray SvgWriter::write(Score* score, size_t pageNumber)
 {
     return write(score, pageNumber, Options());
@@ -69,9 +96,7 @@ ByteArray SvgWriter::write(Score* score, size_t pageNumber, const Options& opt)
     }
     Page* page = pages.at(pageNumber);
 
-    score->setPrinting(true);   // don't print page break symbols etc.
-    MScore::pdfPrinting = true;
-    MScore::svgPrinting = true;
+    PrintingScope printing(score);
 
     const std::unordered_map<const Segment*, int> segmentIds = chordRestSegmentIndex(score);
 
@@ -200,10 +225,6 @@ ByteArray SvgWriter::write(Score* score, size_t pageNumber, const Options& opt)
     }
 
     painter.endDraw();
-
-    score->setPrinting(false);
-    MScore::pdfPrinting = false;
-    MScore::svgPrinting = false;
 
     DrawDataPtr dd = provider->drawData();
     IF_ASSERT_FAILED(dd) {

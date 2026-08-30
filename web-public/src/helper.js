@@ -37,6 +37,11 @@ export { Module }
 export const getStrPtr = (str) => {
     const maxSize = str.length * 4 + 1
     const buf = Module._malloc(maxSize)
+    if (!buf) {
+        // malloc answers 0 when the heap cannot grow. Writing at address 0
+        // would corrupt the module's low memory instead of failing.
+        throw new Error(`scoreview-engine: out of memory (${maxSize} bytes)`)
+    }
     Module.stringToUTF8(str, buf, maxSize)
     return buf
 }
@@ -50,6 +55,9 @@ export const getStrPtr = (str) => {
 export const getTypedArrayPtr = (data) => {
     const size = data.length * data.BYTES_PER_ELEMENT
     const buf = Module._malloc(size)
+    if (!buf) {
+        throw new Error(`scoreview-engine: out of memory (${size} bytes)`)
+    }
     Module.HEAPU8.set(data, buf)
     return buf
 }
@@ -60,6 +68,11 @@ export class WasmRes {
      * @param {number} ptr char* pointer to the responses data
      */
     constructor(ptr) {
+        if (!ptr) {
+            // web/wasmres.cpp returns a null pointer when it cannot allocate
+            // the response block. There is nothing at address 0 to read.
+            throw new WasmError(-1, 'out of memory: the engine could not allocate a response')
+        }
         /** @type {number} */
         this._ptr = ptr
         /** @type {number} */
@@ -200,12 +213,16 @@ export const freePtr = (bufPtr) => {
 /**
  * this promise is resolved when the runtime is fully initialized
  */
-export const RuntimeInitialized = new Promise((resolve) => {
-    ModulePromise.then((_Module) => {
-        Module = _Module
-        Module.ccall('init')  // init libmscore
-        resolve(undefined)
-    })
+export const RuntimeInitialized = ModulePromise.then((_Module) => {
+    Module = _Module
+    // init() answers false when the engine could not be set up (a missing or
+    // unreadable resource pack). Rejecting is the only way a caller hears
+    // about it: this used to resolve regardless, so every later call ran
+    // against a half-registered IoC container - and a module that failed to
+    // load left `await WebMscore.ready` pending forever.
+    if (!Module.ccall('init', 'boolean')) {
+        throw new Error('scoreview-engine: engine initialisation failed (see the log for details)')
+    }
 })
 
 export class WasmError extends Error {
@@ -218,7 +235,7 @@ export class WasmError extends Error {
         this.name = 'WasmError'
         this.errorCode = errorCode
         this.errorName = msg
-        this.message = `WebMscore Err${this.errorName}`
+        this.message = `scoreview-engine error ${errorCode}: ${msg}`
     }
 }
 
