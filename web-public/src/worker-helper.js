@@ -43,7 +43,11 @@ class WebMscoreW {
     constructor() {
         const url = URL.createObjectURL(
             new Blob([
-                `(function () { var MSCORE_SCRIPT_URL = "${MSCORE_SCRIPT_URL}";`  // set the environment variable for worker
+                // JSON.stringify, not a bare "${...}": the URL comes from
+                // document.baseURI / location.href in the bundle, and splicing
+                // that into JS source unquoted is how a page URL turns into
+                // script running in this worker's (same-origin) context.
+                `(function () { var MSCORE_SCRIPT_URL = ${JSON.stringify(MSCORE_SCRIPT_URL)};`  // set the environment variable for worker
                 + '(' + shimDom.toString() + ')();'
                 + '(' + WebMscoreWorker.toString() + ')()'
                 + '})()'
@@ -53,6 +57,8 @@ class WebMscoreW {
         this.worker = new Worker(url)
         /** @private */
         this.workerURL = url
+        /** @private */
+        this.terminated = false
     }
 
     /**
@@ -113,17 +119,33 @@ class WebMscoreW {
         const id = Math.random()
 
         return new Promise((resolve, reject) => {
+            const done = () => {
+                this.worker.removeEventListener('message', listener)
+                this.worker.removeEventListener('error', onError)
+            }
+
             const listener = (e) => {
                 /** @type {RPCRes} */
                 const data = e.data
-                if (data.id === id) {
-                    if (data.error) { reject(new WorkerError(data.error)) }
-                    this.worker.removeEventListener('message', listener)
+                if (data.id !== id) { return }
+                done()
+                if (data.error) {
+                    reject(new WorkerError(data.error))
+                } else {
                     resolve(data.result)
                 }
             }
 
+            // A worker that dies - a wasm trap, a module that fails to load -
+            // never answers. Without this every call in flight would stay
+            // unsettled for the lifetime of the page.
+            const onError = (e) => {
+                done()
+                reject(new Error(`scoreview-engine worker failed: ${e.message || 'unknown error'}`))
+            }
+
             this.worker.addEventListener('message', listener)
+            this.worker.addEventListener('error', onError)
 
             this.worker.postMessage({
                 id,
@@ -236,7 +258,8 @@ class WebMscoreW {
     /**
      * Export score as the SVG file of one page
      * @param {number} pageNumber integer
-     * @param {boolean} drawPageBackground 
+     * @param {boolean} drawPageBackground paint a white rectangle over the page
+     *        rect before drawing (off by default)
      * @returns {Promise<string>} contents of the SVG file (plain text)
      */
     saveSvg(pageNumber = 0, drawPageBackground = false) {
@@ -323,7 +346,10 @@ class WebMscoreW {
      * @returns {Promise<(cancel?: boolean) => Promise<import('../schemas').SynthRes>>} The iterator function
      */
     async synthAudio(starttime = 0) {
-        const fnptr = await this.rpc('_synthAudio', [starttime])
+        // 'synthAudio', not '_synthAudio': the latter does not exist on the
+        // worker's WebMscore, so the not-supported path answered with a
+        // TypeError instead of the NotSupportedError it means.
+        const fnptr = await this.rpc('synthAudio', [starttime])
         return (cancel) => {
             return this.rpc('processSynth', [fnptr, cancel])
         }
@@ -336,7 +362,7 @@ class WebMscoreW {
      * @returns {Promise<(cancel?: boolean) => Promise<import('../schemas').SynthRes[]>>}
      */
     async synthAudioBatch(starttime, batchSize) {
-        const fnptr = await this.rpc('_synthAudio', [starttime])
+        const fnptr = await this.rpc('synthAudioBatch', [starttime, batchSize])
         return (cancel) => {
             return this.rpc('processSynthBatch', [fnptr, batchSize, cancel])
         }
@@ -358,15 +384,30 @@ class WebMscoreW {
      * @returns {void}
      */
     destroy(soft = true) {
+        if (this.terminated) {
+            return
+        }
+        this.terminated = true
+
         if (soft) {
-            // destroy the score instance only
-            this.rpc('destroy', [soft])
+            // Release the score, then take the worker down with it. Each
+            // instance owns exactly one worker and one score and nothing can
+            // be loaded into it again, so keeping the worker alive only held
+            // on to its whole wasm heap.
+            this.rpc('destroy', [true])
+                .catch(() => { /* the worker is going away regardless */ })
+                .then(() => { this._terminate() })
         } else {
             // destroy the whole WebMscore webworker context
             // the default behaviour prior to v0.9.0
-            this.worker.terminate()
-            URL.revokeObjectURL(this.workerURL) // GC
+            this._terminate()
         }
+    }
+
+    /** @private */
+    _terminate() {
+        this.worker.terminate()
+        URL.revokeObjectURL(this.workerURL) // GC
     }
 }
 

@@ -78,10 +78,23 @@ self.onmessage = async (e) => {
                 rpcRes(id, 'done')
                 break
 
-            default:
-                if (!score) { rpcErr(id, new Error('Score not loaded')) }
-                const result = await score[method].apply(score, params)
+            default: {
+                if (!score) {
+                    // Without the break this fell through into the call below,
+                    // threw a TypeError, and answered the same id twice.
+                    rpcErr(id, new Error('Score not loaded'))
+                    break
+                }
+                // `method` comes off the wire; only ever call something the
+                // score actually implements, never an inherited Object member.
+                const fn = score[method]
+                if (typeof fn !== 'function' || method === 'constructor') {
+                    rpcErr(id, new Error(`Unknown method: ${method}`))
+                    break
+                }
+                const result = await fn.apply(score, params)
                 rpcRes(id, result, getTransferable(result))
+            }
         }
     } catch (err) {
         rpcErr(id, err)
