@@ -6,7 +6,6 @@
     "'watch' rule online for newer releases and advisories.",
     "docs/dependencies.md is the prose version of this file."
   ],
-
   "components": [
     {
       "name": "musescore",
@@ -25,7 +24,11 @@
         ],
         "join": "."
       },
-      "watch": { "rule": "github-release", "repo": "musescore/MuseScore", "strip": "v" },
+      "watch": {
+        "rule": "github-release",
+        "repo": "musescore/MuseScore",
+        "strip": "v"
+      },
       "cpe": "cpe:2.3:a:musescore:musescore",
       "note": "A bump re-runs the corpus gate and re-derives every shadow copy (src/shadow/README.md). Not automatable."
     },
@@ -34,8 +37,16 @@
       "version": "2.14.3",
       "kind": "vendored",
       "location": "thirdparty/freetype",
-      "verify": { "rule": "dirname", "glob": "thirdparty/freetype/freetype-*", "prefix": "freetype-" },
-      "watch": { "rule": "github-tag", "repo": "freetype/freetype", "pattern": "^VER-(\\d+)-(\\d+)-(\\d+)$" },
+      "verify": {
+        "rule": "dirname",
+        "glob": "thirdparty/freetype/freetype-*",
+        "prefix": "freetype-"
+      },
+      "watch": {
+        "rule": "github-tag",
+        "repo": "freetype/freetype",
+        "pattern": "^VER-(\\d+)-(\\d+)-(\\d+)$"
+      },
       "cpe": "cpe:2.3:a:freetype:freetype",
       "purl": "pkg:generic/freetype",
       "security_critical": true,
@@ -51,8 +62,16 @@
         "file": "musescore/src/framework/draw/cmake/SetupHarfBuzz.cmake",
         "pattern": "harfbuzz/([0-9]+\\.[0-9]+\\.[0-9]+)"
       },
-      "watch": { "rule": "muse-deps-dir", "repo": "musescore/muse_deps", "ref": "legacy", "path": "harfbuzz" },
-      "watch_upstream": { "rule": "github-release", "repo": "harfbuzz/harfbuzz" },
+      "watch": {
+        "rule": "muse-deps-dir",
+        "repo": "musescore/muse_deps",
+        "ref": "legacy",
+        "path": "harfbuzz"
+      },
+      "watch_upstream": {
+        "rule": "github-release",
+        "repo": "harfbuzz/harfbuzz"
+      },
       "cpe": "cpe:2.3:a:harfbuzz_project:harfbuzz",
       "purl": "pkg:generic/harfbuzz",
       "advisories_acknowledged": {
@@ -67,8 +86,16 @@
       "version": "1.2.0",
       "kind": "vendored",
       "location": "thirdparty/brotli",
-      "verify": { "rule": "dirname", "glob": "thirdparty/brotli/brotli-*", "prefix": "brotli-" },
-      "watch": { "rule": "github-release", "repo": "google/brotli", "strip": "v" },
+      "verify": {
+        "rule": "dirname",
+        "glob": "thirdparty/brotli/brotli-*",
+        "prefix": "brotli-"
+      },
+      "watch": {
+        "rule": "github-release",
+        "repo": "google/brotli",
+        "strip": "v"
+      },
       "cpe": "cpe:2.3:a:google:brotli",
       "purl": "pkg:generic/brotli",
       "security_critical": true,
@@ -76,18 +103,22 @@
     },
     {
       "name": "zlib",
-      "version": "1.3.1",
+      "version": "1.3.2",
       "kind": "toolchain-port",
       "location": "-sUSE_ZLIB=1 (emscripten port, follows the emsdk pin)",
-      "verify": { "rule": "emscripten-port", "port": "zlib", "follows": "emsdk" },
-      "watch": { "rule": "github-release", "repo": "madler/zlib", "strip": "v" },
+      "verify": {
+        "rule": "emscripten-port",
+        "port": "zlib",
+        "follows": "emsdk"
+      },
+      "watch": {
+        "rule": "github-release",
+        "repo": "madler/zlib",
+        "strip": "v"
+      },
       "cpe": "cpe:2.3:a:zlib:zlib",
       "purl": "pkg:generic/zlib",
       "security_critical": true,
-      "advisories_acknowledged": {
-        "CVE-2026-22184": "Global buffer overflow in contrib/untgz, CVSS 7.8. NVD's own text says it does not affect the core library, and the emscripten port compiles exactly fifteen core .c files (adler32, compress, crc32, deflate, gz*, inf*, trees, uncompr, zutil) — contrib/ is not built. Not applicable.",
-        "CVE-2026-27171": "Unbounded loop in x2nmodp, reached through crc32_combine64 / crc32_combine_gen64, CVSS 2.9. Nothing in this engine or in MuseScore calls either: the mscz path uses inflate only. Not reachable. (Taking 1.3.2 is still worth it for the 7ASecurity audit fixes — that is the emsdk item, tracked as version drift above, not as this CVE.)"
-      },
       "note": "Reads the mscz container. Version is whatever the pinned emsdk ships, so the only way to move it is an emsdk bump. The native CLI links the distro zlib instead, which gets distro security updates."
     },
     {
@@ -95,21 +126,32 @@
       "version": "1.4",
       "kind": "vendored-fork",
       "location": "thirdparty/msdfgen",
-      "verify": { "rule": "dirname", "glob": "thirdparty/msdfgen/msdfgen-*", "prefix": "msdfgen-" },
-      "watch": { "rule": "frozen" },
+      "verify": {
+        "rule": "dirname",
+        "glob": "thirdparty/msdfgen/msdfgen-*",
+        "prefix": "msdfgen-"
+      },
+      "watch": {
+        "rule": "frozen"
+      },
       "note": "A MuseScore-reworked 1.4, not stock: ifontface.h compares glyph shapes over its by-value EdgeSegment types, which do not exist upstream. Build-only — nothing in the conversion path calls FontsEngine::render(), so dead-code elimination strips it from the wasm. Deliberately frozen; see thirdparty/msdfgen/README.md."
     },
     {
       "name": "emsdk",
-      "version": "4.0.7",
+      "version": "6.0.8",
       "kind": "toolchain",
       "location": ".github/workflows/build.yml, tools/build-wasm-docker.sh",
       "verify": {
         "rule": "regex-all",
-        "files": [".github/workflows/build.yml", "tools/build-wasm-docker.sh"],
+        "files": [
+          ".github/workflows/build.yml",
+          "tools/build-wasm-docker.sh"
+        ],
         "pattern": "emscripten/emsdk:([0-9]+\\.[0-9]+\\.[0-9]+)"
       },
-      "watch": { "rule": "emscripten-releases" },
+      "watch": {
+        "rule": "emscripten-releases"
+      },
       "note": "Pins the wasm toolchain, and with it the zlib port and the float noise the wasm gate tolerates. A bump means re-measuring that gate."
     },
     {
@@ -119,7 +161,10 @@
       "location": ".github/workflows/build.yml, Dockerfile",
       "verify": {
         "rule": "regex-all",
-        "files": [".github/workflows/build.yml", "Dockerfile"],
+        "files": [
+          ".github/workflows/build.yml",
+          "Dockerfile"
+        ],
         "pattern": "ubuntu[:-]([0-9]{2}\\.[0-9]{2})"
       },
       "watch": {
@@ -134,8 +179,15 @@
       "version": "22",
       "kind": "ci-runtime",
       "location": ".github/workflows/build.yml",
-      "verify": { "rule": "regex", "file": ".github/workflows/build.yml", "pattern": "node-version:\\s*([0-9]+)" },
-      "watch": { "rule": "nodejs-lts", "major": "22" },
+      "verify": {
+        "rule": "regex",
+        "file": ".github/workflows/build.yml",
+        "pattern": "node-version:\\s*([0-9]+)"
+      },
+      "watch": {
+        "rule": "nodejs-lts",
+        "major": "22"
+      },
       "note": "The package declares engines >=18; ScoreView runs the wasm under Node. Watched by end of support, not by 'a newer major exists' — there always is one, and moving majors for its own sake buys nothing here."
     },
     {
@@ -143,8 +195,14 @@
       "version": "4.63.0",
       "kind": "npm-dev",
       "location": "web-public/package-lock.json",
-      "verify": { "rule": "npm-lock", "lock": "web-public/package-lock.json", "package": "rollup" },
-      "watch": { "rule": "dependabot" },
+      "verify": {
+        "rule": "npm-lock",
+        "lock": "web-public/package-lock.json",
+        "package": "rollup"
+      },
+      "watch": {
+        "rule": "dependabot"
+      },
       "note": "Bundles the JS wrapper. Build-time only; the published package has no runtime dependencies."
     },
     {
@@ -152,8 +210,14 @@
       "version": "7.0.2",
       "kind": "npm-dev",
       "location": "web-public/package-lock.json",
-      "verify": { "rule": "npm-lock", "lock": "web-public/package-lock.json", "package": "typescript" },
-      "watch": { "rule": "dependabot" },
+      "verify": {
+        "rule": "npm-lock",
+        "lock": "web-public/package-lock.json",
+        "package": "typescript"
+      },
+      "watch": {
+        "rule": "dependabot"
+      },
       "note": "Emits the .d.ts files. Build-time only."
     }
   ]

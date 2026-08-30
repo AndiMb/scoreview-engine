@@ -83,6 +83,19 @@ set(FREETYPE_INCLUDE_DIRS ${FREETYPE_DIR}/include)
 # the archive for offline container builds).
 include(${MU_ROOT}/src/framework/draw/cmake/SetupHarfBuzz.cmake)
 
+# hb.hh promotes a list of warnings to errors with #pragma GCC diagnostic, one
+# of them -Wunused. Clang 21 (emsdk 6.0.8) moved -Wunused-template into that
+# group, so HarfBuzz 12.3.0 no longer compiles: nineteen errors out of its own
+# headers. Newer HarfBuzz fixes this, but the version is not ours to pick —
+# muse_deps offers 12.3.0 and 7.1.0, and moving off that channel would
+# invalidate the corpus baseline HarfBuzz's advances decide.
+#
+# HB_NO_PRAGMA_GCC_DIAGNOSTIC_ERROR is HarfBuzz's own opt-out for exactly this
+# (hb.hh guards the whole block with it). A command-line -Wno- would not do:
+# the pragma wins over it. Nothing about the generated code changes — warnings
+# simply stop being fatal inside this third-party target.
+target_compile_definitions(harfbuzz PRIVATE HB_NO_PRAGMA_GCC_DIAGNOSTIC_ERROR)
+
 # msdfgen: removed upstream 2024-03-29 (c7cf38d1f6, "removed msdfgen and
 # harfbuzz") but still referenced by the Qt-free branch (ifontface.h,
 # fontsengine.cpp, fontfaceft.cpp). Vendored from history — a *modified* 1.4,
@@ -185,8 +198,14 @@ if(EMSCRIPTEN)
     set(WASM_LINK_FLAGS "--no-entry")
     set(WASM_LINK_FLAGS "${WASM_LINK_FLAGS} -s WASM=1")
     set(WASM_LINK_FLAGS "${WASM_LINK_FLAGS} -s DYNAMIC_EXECUTION=0")
-    set(WASM_LINK_FLAGS "${WASM_LINK_FLAGS} -s EXPORT_ES6=1 -s USE_ES6_IMPORT_META=1 -s MODULARIZE=1")
-    set(WASM_LINK_FLAGS "${WASM_LINK_FLAGS} -s NODEJS_CATCH_EXIT=0 -s NODEJS_CATCH_REJECTION=0")
+    set(WASM_LINK_FLAGS "${WASM_LINK_FLAGS} -s EXPORT_ES6=1 -s MODULARIZE=1")
+    # Three settings dropped with the 6.0.8 toolchain, all of them no-ops by
+    # then: USE_ES6_IMPORT_META=1 (disabling it is no longer supported) and
+    # NODEJS_CATCH_EXIT=0 / NODEJS_CATCH_REJECTION=0, removed in 5.0.3 because
+    # each injected a global process.on handler and node >= 15 has the
+    # rejection behaviour anyway. Emscripten still tolerates all three as
+    # legacy settings at exactly the values we passed, so this changes nothing
+    # about the output — it just stops carrying them.
     set(WASM_LINK_FLAGS "${WASM_LINK_FLAGS} -s ALLOW_TABLE_GROWTH=1")
     set(WASM_LINK_FLAGS "${WASM_LINK_FLAGS} -s ALLOW_MEMORY_GROWTH=1")
     set(WASM_LINK_FLAGS "${WASM_LINK_FLAGS} -s INITIAL_MEMORY=32MB")

@@ -15,14 +15,14 @@ Native, and therefore part of the shipped wasm:
 | FreeType | 2.14.3 | `thirdparty/freetype/` | vendored, ours to bump |
 | HarfBuzz | 12.3.0 | `SetupHarfBuzz.cmake` (submodule) | MuseScore's muse_deps channel |
 | brotli | 1.2.0 | `thirdparty/brotli/` | vendored, ours to bump |
-| zlib | 1.3.1 | emscripten port, follows the emsdk pin | only via an emsdk bump |
+| zlib | 1.3.2 | emscripten port, follows the emsdk pin | only via an emsdk bump |
 | msdfgen | 1.4 (MuseScore fork) | `thirdparty/msdfgen/` | frozen on purpose |
 
 Toolchain and CI:
 
 | | In use | Where |
 |---|---|---|
-| emsdk / Emscripten | 4.0.7 | `build.yml`, `tools/build-wasm-docker.sh` |
+| emsdk / Emscripten | 6.0.8 | `build.yml`, `tools/build-wasm-docker.sh` |
 | Ubuntu | 24.04 | `build.yml`, `Dockerfile` |
 | g++ | 10 | `Dockerfile` |
 | Node | 22 (supported to 2027-04-30) | `build.yml`; package declares `engines: >=18` |
@@ -77,11 +77,12 @@ findings. What is acknowledged today, and why:
 | OSV-2023-137 | harfbuzz | Heap-buffer-overflow in `Coverage::get_population` — shaping code, so it *would* be reachable, but it was fixed in 2023 and 12.3.0 sits 4116 commits ahead of the fix and none behind. OSV records it as a commit range, which is why a version query still matches. |
 | OSV-2026-53 | harfbuzz | Use-after-free in `graph::LigatureSubstFormat1::shrink` — hb-subset. The only HarfBuzz API this engine calls is the shaping one; nothing calls `hb_subset_*`. Linked in only because muse_deps builds the amalgamated source. |
 | OSV-2026-962 | harfbuzz | Uninitialized value in `iup_delta_optimize` — hb-subset, same reasoning. |
-| CVE-2026-22184 | zlib | Buffer overflow in `contrib/untgz`, CVSS 7.8. NVD's own text limits it to the standalone utility, and the emscripten port builds only the fifteen core `.c` files. `contrib/` is not compiled. |
-| CVE-2026-27171 | zlib | Unbounded loop reachable through `crc32_combine64`, CVSS 2.9. Nothing here calls it — the mscz path uses `inflate` only. |
-
 An acknowledgement is a claim about *this* build and it expires with the next
-bump of that dependency: re-check them when the version moves.
+bump of that dependency: re-check them when the version moves. Two zlib entries
+stood here until the emsdk bump took zlib to 1.3.2 — CVE-2026-22184 (`contrib/untgz`,
+not built) and CVE-2026-27171 (`crc32_combine64`, not called). NVD reports
+nothing against 1.3.2, so both were removed rather than carried forward, which
+is the rule working as intended.
 
 ## What runs when
 
@@ -115,16 +116,35 @@ a URL and a 7z) and re-measuring the corpus baseline, because HarfBuzz decides
 glyph advances and with them the layout the baseline was recorded against.
 12.3.1 and 12.3.2 are fuzzing and NULL-dereference hardening, no CVE.
 
-**zlib** — not directly updatable. The wasm links whatever the pinned emsdk's
-port ships, today 1.3.1; the native CLI links the distro package and gets
-distro security updates. zlib 1.3.2 (2026-02-17) carries the fixes from the
-7ASecurity audit, and the only route to it is an emsdk bump.
+Being stuck on 12.3.0 has a second cost, which the emsdk bump exposed: it does
+not compile under Clang 21. `hb.hh` promotes a list of warnings to errors with
+`#pragma GCC diagnostic`, one of them `-Wunused`, and Clang 21 moved
+`-Wunused-template` into that group — nineteen errors out of HarfBuzz's own
+headers. Newer HarfBuzz fixes it. Since the version is not ours to pick, the
+top-level `CMakeLists.txt` sets `HB_NO_PRAGMA_GCC_DIAGNOSTIC_ERROR` for that
+target, which is HarfBuzz's own opt-out for the block. A command-line `-Wno-`
+would not work: the pragma outranks it. Nothing about the generated code
+changes, and the native corpus fingerprint is unchanged by it.
 
-**emsdk** — 4.0.7 against 6.0.8 upstream, two majors. Worth doing, and it is
-the open item on this page, but it is its own piece of work: the wasm gate's
-tolerated float noise is toolchain-specific, so the bump means re-measuring it,
-and Emscripten renames link settings between majors without always erroring on
-an unknown one.
+**zlib** — not directly updatable. The wasm links whatever the pinned emsdk's
+port ships, today 1.3.2 (the release carrying the 7ASecurity audit fixes); the
+native CLI links the distro package and gets distro security updates. The only
+route to a newer zlib is an emsdk bump.
+
+**emsdk** — 6.0.8, moved there from 4.0.7 on 2026-08-30, two majors, and the
+reason zlib is current. What the jump actually cost, since the note that used
+to stand here guessed at it:
+
+* Three link settings in `CMakeLists.txt` had gone: `USE_ES6_IMPORT_META`,
+  and `NODEJS_CATCH_EXIT` / `NODEJS_CATCH_REJECTION`, removed in 5.0.3. All
+  three survive as legacy settings at exactly the values we were passing, so
+  nothing broke — they were simply dropped.
+* HarfBuzz 12.3.0 stopped compiling, which is the interesting one; see its
+  entry above.
+* The float noise did **not** move. The wasm gate fires exactly the same
+  eleven waivers on the same eleven scores as under 4.0.7 — nothing new, none
+  gone stale. The artifact grew from 9.28 to 9.48 MB of wasm, the JS glue
+  shrank slightly, the resource pack is unchanged.
 
 **MuseScore** — a bump re-runs the corpus gate and re-derives every shadow copy
 (`src/shadow/README.md`). Note that `main` no longer has `src/framework` at all:

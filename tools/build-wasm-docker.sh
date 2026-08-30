@@ -1,5 +1,5 @@
 #!/bin/sh
-# wasm build via Docker — emscripten/emsdk pinned to 4.0.7, the version CI
+# wasm build via Docker — emscripten/emsdk pinned to 6.0.8, the version CI
 # builds with, so toolchain drift never explains an output diff.
 #
 # usage: tools/build-wasm-docker.sh [make-args...]
@@ -10,7 +10,7 @@ set -e
 root="$(cd "$(dirname "$0")/.." && pwd)"
 rootw="$(cygpath -m "$root" 2>/dev/null || echo "$root")"
 vol=sve-build-wasm
-image=emscripten/emsdk:4.0.7
+image=emscripten/emsdk:6.0.8
 
 # Pre-seed HarfBuzz from prefetch/ — the muse_deps download resolves an
 # IPv6-only host and fails inside the container.
