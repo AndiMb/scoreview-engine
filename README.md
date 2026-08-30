@@ -132,16 +132,17 @@ browser bundles.
 
 The reference is the Qt line — `AndiMb/webmscore`, this project's ancestor:
 the baseline this pipeline is measured against, score for score. That fork
-was retired on 2026-08-30 and its repository deleted; what survives is the
-frozen baseline in `testdata/` and the release tarball `webmscore4-4.7.4.tgz`
-(`v4.7.4-scoreview.7`), kept outside this repository.
+was retired on 2026-08-30 and its repository deleted; all that survives is
+the frozen baseline in `testdata/`. The release tarball
+`webmscore4-4.7.4.tgz` (`v4.7.4-scoreview.7`), briefly kept outside this
+repository, was deleted the same day.
 
 `tools/corpus-native.py` fingerprints every `musescore/vtest/scores`
 conversion (pages, measures, positions counts, MIDI bytes, stable metadata;
 with `--with-svg` also SVG generation and page-1 sizes) and
 `tools/corpus-compare.py` diffs it against `testdata/corpus-baseline.json` —
-fingerprints of the released Qt webmscore (v4.7.4-scoreview.7), regenerable
-from that tarball with a Node script shaped like `tools/corpus-node.cjs`. Only the metadata `tracks` count
+fingerprints of the released Qt webmscore (v4.7.4-scoreview.7), frozen for
+good: the tarball they were generated from no longer exists. Only the metadata `tracks` count
 may differ (no audio here, the list is always empty); deliberate deviations
 are recorded per score and field in `testdata/corpus-waivers.json`, and a
 waiver that stops firing is itself a failure.

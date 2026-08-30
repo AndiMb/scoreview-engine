@@ -305,9 +305,10 @@ real MuseScore bump.
 
 *As executed, 2026-08-30:* both repositories were **deleted** instead, and
 before that bump. Kept from the Qt line: the frozen `testdata/corpus-
-baseline.json`, the release tarball `webmscore4-4.7.4.tgz`
-(`v4.7.4-scoreview.7`) and the plugin artifacts, all outside this repository;
-these two documents moved here. The consequences are deliberate: a Qt
+baseline.json` and these two documents, moved here. The release tarball
+`webmscore4-4.7.4.tgz` (`v4.7.4-scoreview.7`) and the `libqoffscreen`
+artifacts were held outside this repository only briefly and then deleted
+too, on the same day. The consequences are deliberate: a Qt
 baseline for a *future* MuseScore version can no longer be produced, so
 fidelity questions are decided against the frozen baseline plus desktop
 MuseScore Studio (as Phase 4 already did), and audio/PDF/PNG/MusicXML have no
