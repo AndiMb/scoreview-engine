@@ -6,8 +6,8 @@ files and produces SVG pages, MIDI, playback positions (spos/mpos) and
 metadata JSON. No Qt, no audio synthesis, no UI.
 
 Releases are npm tarballs attached to GitHub Releases (`v4.7.4-engine.N`),
-API-compatible with [webmscore](https://github.com/AndiMb/webmscore) for the
-surface they support; ScoreView's server-side `local` conversion backend runs
+API-compatible with [webmscore](https://github.com/LibreScore/webmscore) for
+the surface they support; ScoreView's server-side `local` conversion backend runs
 on them. Every release comes out of a CI run whose corpus gate passed: all
 569 vtest scores converted natively and under Node, fingerprinted against the
 released Qt webmscore.
@@ -130,15 +130,18 @@ browser bundles.
 
 ## Fidelity gates
 
-The reference is [AndiMb/webmscore](https://github.com/AndiMb/webmscore),
-the Qt line: the baseline this pipeline is measured against, score for score.
+The reference is the Qt line — `AndiMb/webmscore`, this project's ancestor:
+the baseline this pipeline is measured against, score for score. That fork
+was retired on 2026-08-30 and its repository deleted; what survives is the
+frozen baseline in `testdata/` and the release tarball `webmscore4-4.7.4.tgz`
+(`v4.7.4-scoreview.7`), kept outside this repository.
 
 `tools/corpus-native.py` fingerprints every `musescore/vtest/scores`
 conversion (pages, measures, positions counts, MIDI bytes, stable metadata;
 with `--with-svg` also SVG generation and page-1 sizes) and
 `tools/corpus-compare.py` diffs it against `testdata/corpus-baseline.json` —
 fingerprints of the released Qt webmscore (v4.7.4-scoreview.7), regenerable
-with the fork's `web-example/corpus.cjs`. Only the metadata `tracks` count
+from that tarball with a Node script shaped like `tools/corpus-node.cjs`. Only the metadata `tracks` count
 may differ (no audio here, the list is always empty); deliberate deviations
 are recorded per score and field in `testdata/corpus-waivers.json`, and a
 waiver that stops firing is itself a failure.
