@@ -140,6 +140,9 @@ set(FONTSTACK_SRC
 add_library(sve_engine STATIC
     src/api/scoreloader.cpp
     src/config/engravinginit.cpp
+    src/image/imageformat.cpp
+    src/image/imageprovider.cpp
+    src/platform/cryptographichash.cpp
     src/shadow/engravingfontsprovider.cpp
     src/shadow/midifile.cpp
     src/shadow/exportmidi.cpp

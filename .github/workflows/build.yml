@@ -46,6 +46,15 @@ jobs:
           test -s build/out/page-1.drawdata.json
           test -s build/out/page-1.svg
 
+      # The corpus carries no score with a picture, so nothing else here would
+      # notice if embedded images stopped working - and they used to take the
+      # whole load down, not just the picture.
+      - name: Convert test score with embedded images
+        run: |
+          build/mscz2media testdata/image-test.mscz --resources resources --out build/out-images --svg
+          grep -q 'xlink:href="data:image/png;base64,' build/out-images/page-1.svg
+          grep -q 'xlink:href="data:image/jpeg;base64,' build/out-images/page-1.svg
+
       # The corpus gate: fingerprints of MIDI, spos/mpos and metadata for all
       # vtest scores must match the released Qt webmscore (baseline in
       # testdata/). "tracks" is allowed to differ — this build has no audio,

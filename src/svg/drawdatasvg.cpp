@@ -6,6 +6,7 @@
 
 #include "modularity/ioc.h"
 
+#include "image/imageformat.h"
 #include "shadow/fontsengine.h"
 #include "internal/ifontface.h"
 
@@ -168,13 +169,68 @@ static void shapeData(std::ostream& os, const msdfgen::Shape& shape)
     os << "\"";
 }
 
+static void base64(std::ostream& os, const ByteArray& data)
+{
+    static const char TABLE[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    const uint8_t* p = data.constData();
+    const size_t size = data.size();
+    char quad[4];
+    size_t i = 0;
+    for (; i + 3 <= size; i += 3) {
+        uint32_t v = uint32_t(p[i]) << 16 | uint32_t(p[i + 1]) << 8 | p[i + 2];
+        quad[0] = TABLE[(v >> 18) & 0x3F];
+        quad[1] = TABLE[(v >> 12) & 0x3F];
+        quad[2] = TABLE[(v >> 6) & 0x3F];
+        quad[3] = TABLE[v & 0x3F];
+        os.write(quad, 4);
+    }
+    if (i < size) {
+        const bool twoBytes = i + 1 < size;
+        uint32_t v = uint32_t(p[i]) << 16 | (twoBytes ? uint32_t(p[i + 1]) << 8 : 0);
+        quad[0] = TABLE[(v >> 18) & 0x3F];
+        quad[1] = TABLE[(v >> 12) & 0x3F];
+        quad[2] = twoBytes ? TABLE[(v >> 6) & 0x3F] : '=';
+        quad[3] = '=';
+        os.write(quad, 4);
+    }
+}
+
+// An embedded picture goes into the SVG as its own bytes, base64 in a data
+// URI - self-contained like the glyph outlines, and no second request from
+// the viewer.
+//
+// Width and height come from the PIXMAP, never from the rect: TDraw hands
+// drawPixmap a point, not a rectangle, and sizes a picture one of two ways.
+// Above maxScaledImageDim it draws the original at its pixel size and leaves
+// the scaling to the state transform the element already sits in; below that
+// it asks the provider for a pixmap pre-sized to the target and draws that
+// 1:1. The pixmap's own size is the right answer in both cases, and
+// preserveAspectRatio="none" keeps a non-uniform target from adding the
+// letterbox margins drawPixmap would not have.
+static void writePixmap(std::ostream& os, const DrawPixmap& px)
+{
+    const ByteArray data = px.pm.data();
+    // Tiled is the editor's canvas background; nothing in the score painting
+    // path produces one.
+    ImageFormat format = px.mode == DrawPixmap::Single ? probeImage(data) : ImageFormat();
+    if (!format.isKnown()) {
+        os << "<!-- image not rendered: " << data.size() << " bytes, unsupported format -->\n";
+        return;
+    }
+
+    os << "<image x=\"" << fmt(px.rect.x()) << "\" y=\"" << fmt(px.rect.y())
+       << "\" width=\"" << fmt(px.pm.width()) << "\" height=\"" << fmt(px.pm.height())
+       << "\" preserveAspectRatio=\"none\" xlink:href=\"data:" << format.mediaType << ";base64,";
+    base64(os, data);
+    os << "\"/>\n";
+}
+
 namespace {
 struct SvgContext {
     FontsEngine* fontsEngine = nullptr;
     // one def per distinct glyph; keyed by face identity + glyph index
     std::map<std::pair<const IFontFace*, glyph_idx_t>, std::string> glyphIds;
     std::ostringstream defs;
-    bool pixmapSeen = false;
 
     std::string glyphDef(const IFontFace* face, glyph_idx_t idx)
     {
@@ -285,9 +341,8 @@ static void writeData(std::ostream& os, SvgContext& ctx, const DrawData::Data& d
         }
     }
 
-    if (!data.pixmaps.empty()) {
-        ctx.pixmapSeen = true;
-        os << "<!-- " << data.pixmaps.size() << " pixmap(s) not rendered -->\n";
+    for (const DrawPixmap& px : data.pixmaps) {
+        writePixmap(os, px);
     }
 }
 

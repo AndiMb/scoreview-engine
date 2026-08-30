@@ -22,8 +22,9 @@ when upstream drifts.
 
     ├── musescore/            # submodule, pinned to an upstream release tag (v4.7.4)
     ├── src/
-    │   ├── platform/         # IFileSystem (native + wasm), resource path mapping
+    │   ├── platform/         # IFileSystem, MD4 - the muse_global interfaces Qt owned
     │   ├── config/           # IEngravingConfiguration, fonts init
+    │   ├── image/            # embedded pictures: header probe + IImageProvider
     │   ├── shadow/           # shadow-compiled upstream sources (diff-guarded)
     │   ├── svg/              # DrawData -> SVG writer
     │   ├── positions/        # spos/mpos writer from layout data
@@ -32,7 +33,7 @@ when upstream drifts.
     ├── resources/            # fonts (woff2) + SMuFL metadata (replaces the qrc)
     ├── web/                  # wasm entry (C ABI + WasmRes wire format)
     ├── web-public/           # JS wrapper (webmscore-compatible subset, no audio)
-    ├── testdata/             # corpus baseline and waivers, one test score
+    ├── testdata/             # corpus baseline and waivers, two test scores
     └── tools/                # mscz2media CLI, build scripts, corpus gates
 
 * **Toolchain:** Emscripten only (wasm) / plain g++ (native CLI). FreeType,
@@ -49,6 +50,10 @@ when upstream drifts.
   methods throw a clear "not supported in this build" error.
 * **SVG text:** glyph outlines as `<path>` — self-contained SVG, no font
   delivery to browsers.
+* **Embedded pictures:** carried through undecoded — the header gives the pixel
+  size the layout needs, the original bytes go into an `<image>` data URI. PNG,
+  JPEG, GIF and BMP; the two formats MuseScore accepts and a browser cannot
+  show (TIFF, and SVG-in-score, which needs `QSvgRenderer`) draw nothing.
 
 ## From `.mscz` to SVG
 
@@ -73,6 +78,7 @@ to wasm — the same score takes this route:
 | Painting a page | `Painter` → `QPainterProvider` → `QPainter` on `SvgGenerator`, a `QPaintDevice` that streams SVG while painting | `Painter` → `SvgPaintProvider`, which *records* the page into a `DrawData` buffer; serialization is a separate, Qt-free step |
 | Element identity | the writer sets the current `EngravingItem` on the paint engine before each item | `beginObject(classTag(e))` around each item → `<g class="Chord seg-42 st-0 vc-0">`, same class strings, `seg-N` the id the position export hands the player |
 | Glyphs | Qt's paint-engine text emulation converts every glyph to an inline `<path>`, repeated at every occurrence | `FontsEngine::glyphRuns()` yields glyph ids and pen positions; each distinct glyph is emitted once as a `<path>` in `<defs>` and placed with `<use>` |
+| Embedded pictures | Qt's image plugins decode into a `QImage`, which the SVG generator re-encodes as a PNG data URI | the header is read for the pixel size, the file's own bytes become the data URI — a JPEG stays a JPEG |
 | Page geometry | `width`/`height` in mm, `viewBox` in engraving units (DPI 1200) | the same numbers — the pages are drop-in replacements |
 | Page-1 SVG size | baseline | 58 % of it over the corpus (glyph deduplication) |
 | Title | file name (a random temp name in webmscore) | title text / `workTitle`, or no `<title>` — deterministic across builds |

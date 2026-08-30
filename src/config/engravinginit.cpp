@@ -2,8 +2,10 @@
 
 #include "modularity/ioc.h"
 
+#include "platform/cryptographichash.h"
 #include "platform/enginefilesystem.h"
 #include "config/engravingconfiguration.h"
+#include "image/imageprovider.h"
 
 #include "types/fontstypes.h"
 #include "internal/fontsdatabase.h"
@@ -31,6 +33,7 @@ bool sve::initEngraving(const std::string& resourceRoot)
     modularity::ContextPtr ctx;
 
     ioc->registerExport<io::IFileSystem>(MODULE_NAME, new EngineFileSystem(resourceRoot));
+    ioc->registerExport<ICryptographicHash>(MODULE_NAME, new CryptographicHash());
 
     FontsDatabase* fdb = new FontsDatabase();
     ioc->registerExport<IFontsDatabase>(MODULE_NAME, fdb);
@@ -44,6 +47,11 @@ bool sve::initEngraving(const std::string& resourceRoot)
     ioc->registerExport<IEngravingConfiguration>(MODULE_NAME, conf);
 
     ioc->registerExport<rendering::IScoreRenderer>(MODULE_NAME, new rendering::score::ScoreRenderer());
+
+    // Embedded pictures. Without this one Image::init() calls straight
+    // through an unresolved inject and a score carrying one does not load
+    // at all - as with the hash above, which the image store needs first.
+    ioc->registerExport<IImageProvider>(MODULE_NAME, new ImageProvider());
 
     // Fonts as in EngravingModule::onInit, trimmed to what conversion needs
     fdb->addFont(FontDataKey(u"Edwin", false, false), ":/fonts/edwin/Edwin-Roman.woff2");
