@@ -1,0 +1,29 @@
+version: 2
+
+updates:
+  # The workflow's actions. Without this they simply rot: the repo has no
+  # other reason to touch build.yml, and a major that goes unsupported turns
+  # into a red build on an unrelated day.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+
+  # The JS wrapper's build tools (rollup, typescript). Runtime dependencies:
+  # none — the wrapper ships as bundles.
+  - package-ecosystem: npm
+    directory: /web-public
+    schedule:
+      interval: weekly
+
+# Deliberately not covered, because no ecosystem can:
+#
+# * the MuseScore submodule — a bump means the corpus gate has to be re-run
+#   and every shadow copy re-derived (src/shadow/README.md);
+# * emsdk, pinned in build.yml and in tools/build-wasm-docker.sh — the wasm
+#   gate's tolerated float noise is toolchain-specific;
+# * thirdparty/brotli and thirdparty/msdfgen, vendored source (see the README
+#   next to each);
+# * HarfBuzz, which comes from MuseScore's muse_deps pin and must stay in step
+#   with the submodule: it decides glyph advances, and with them the layout
+#   the corpus baseline was measured against.

@@ -11,9 +11,9 @@
 # CMakeLists puts it there.
 
 get_filename_component(BROTLIDEC_INCLUDE_DIRS
-    ${CMAKE_CURRENT_LIST_DIR}/../thirdparty/brotli/brotli-1.1.0/c/include ABSOLUTE)
+    ${CMAKE_CURRENT_LIST_DIR}/../thirdparty/brotli/brotli-1.2.0/c/include ABSOLUTE)
 
 set(BROTLIDEC_LIBRARIES brotlidec)   # the target from thirdparty/brotli
 set(BROTLIDEC_DEFINITIONS "")
-set(BROTLIDEC_VERSION 1.1.0)
+set(BROTLIDEC_VERSION 1.2.0)
 set(BROTLIDEC_FOUND TRUE)
