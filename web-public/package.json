@@ -39,7 +39,7 @@
     },
     "devDependencies": {
         "rollup": "^4.63.0",
-        "typescript": "^5"
+        "typescript": "^7"
     },
     "scripts": {
         "build": "npm run clean:d-ts && npm run bundle && npm run d-ts",
