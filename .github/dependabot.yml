@@ -21,9 +21,16 @@ updates:
 # * the MuseScore submodule — a bump means the corpus gate has to be re-run
 #   and every shadow copy re-derived (src/shadow/README.md);
 # * emsdk, pinned in build.yml and in tools/build-wasm-docker.sh — the wasm
-#   gate's tolerated float noise is toolchain-specific;
-# * thirdparty/brotli and thirdparty/msdfgen, vendored source (see the README
-#   next to each);
+#   gate's tolerated float noise is toolchain-specific, and the zlib the wasm
+#   links rides along with it;
+# * thirdparty/freetype, thirdparty/brotli and thirdparty/msdfgen, vendored
+#   source (see the README next to each);
 # * HarfBuzz, which comes from MuseScore's muse_deps pin and must stay in step
 #   with the submodule: it decides glyph advances, and with them the layout
 #   the corpus baseline was measured against.
+#
+# Those are not unwatched, they are watched elsewhere: tools/deps.json lists
+# them with the place in the tree each version is written down, check-deps.py
+# verifies that on every build and asks upstream weekly, and
+# .github/workflows/dependencies.yml files an issue when one has moved.
+# docs/dependencies.md is the prose version.

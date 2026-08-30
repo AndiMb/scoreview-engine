@@ -43,7 +43,7 @@ when upstream drifts.
   read a single .woff2; the same decoder is what lets a caller hand `addFont()`
   a woff2 file. FreeType is vendored rather than taken from the submodule
   because it parses untrusted input and must be patchable on its own schedule
-  (`thirdparty/freetype/README.md`).
+  (`thirdparty/freetype/README.md`, [docs/dependencies.md](docs/dependencies.md)).
 * **API:** webmscore-compatible for the supported subset (SVG pages, MIDI,
   spos/mpos, metadata, extra fonts, `destroy()`). Audio, PNG/PDF and MusicXML
   methods throw a clear "not supported in this build" error.
@@ -165,9 +165,19 @@ nothing textual beyond the viewBox is compared; a light blur forgives the
 sub-pixel kerning shifts of HarfBuzz vs Qt, and structural defects land far
 above the thresholds.
 
-CI runs the native gate, the wasm gate and the shadow drift guard on every
-build; a push to `main` whose commit message starts with `release v` attaches
-that run's tarball to a GitHub Release.
+CI runs the native gate, the wasm gate, the shadow drift guard and the
+dependency manifest check on every build; a push to `main` whose commit message
+starts with `release v` attaches that run's tarball to a GitHub Release.
+
+## Dependencies
+
+FreeType, HarfBuzz, brotli, msdfgen, zlib and the emsdk are vendored or pinned,
+so no package ecosystem watches them and Dependabot only covers the npm packages
+and the actions. [docs/dependencies.md](docs/dependencies.md) is the inventory:
+what is in use, where each version is written down, and how a security fix
+reaches it. `tools/deps.json` is the same thing machine-readable,
+`tools/check-deps.py --verify` holds the two together on every build, and a
+weekly workflow asks upstream what has moved.
 
 ## License
 

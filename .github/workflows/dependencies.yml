@@ -1,0 +1,85 @@
+name: Dependencies
+
+# Weekly watch over the dependencies no package ecosystem can see: FreeType,
+# HarfBuzz, brotli, msdfgen, zlib, the emsdk and the MuseScore submodule.
+# Dependabot covers the npm packages and the actions; this covers the rest,
+# and it exists because waiting for upstream does not work — MuseScore's own
+# muse_deps still pinned FreeType 2.14.1 in August 2026, two security releases
+# and nine CVEs behind.
+#
+# The primary signal is release currency, not a CVE feed. For vendored C
+# libraries the feeds are patchy: of the nine CVEs fixed in FreeType 2.14.2
+# and 2.14.3, OSV knew none under pkg:generic/freetype and NVD matched one
+# against cpe:2.3:a:freetype:freetype — the rest are filed against Oracle
+# Java, which bundles FreeType. So the feeds run too, but only as a second
+# opinion. tools/check-deps.py says the same thing at more length.
+
+on:
+  schedule:
+    - cron: '17 6 * * 1'   # Mondays, 06:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      # No submodules on purpose: check-deps.py skips the rules that would
+      # need them rather than pulling 800 MB to read two version strings.
+      - uses: actions/checkout@v7
+
+      - name: Check dependencies
+        id: check
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          # Optional. Without it the NVD queries are rate-limited to 5 per
+          # 30 s, which the script paces for; with it they just run faster.
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+        run: |
+          status=0
+          python3 tools/check-deps.py --verify --online --updates --advisories --markdown \
+            > report.md || status=$?
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          cat report.md
+          {
+            echo "# Dependency check"
+            echo
+            cat report.md
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Exit 2 means the checker broke (network, upstream API change, a bug in
+      # the script) rather than a dependency having moved. That is a red build,
+      # not an issue about dependencies.
+      - name: Checker failed
+        if: steps.check.outputs.status != '0' && steps.check.outputs.status != '1'
+        run: |
+          echo "check-deps.py exited ${{ steps.check.outputs.status }}" >&2
+          exit 1
+
+      - name: File the findings
+        if: steps.check.outputs.status == '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh label create dependencies \
+            --description "Vendored and pinned dependencies that have moved" \
+            --color ededed 2>/dev/null || true
+
+          existing=$(gh issue list --state open --label dependencies \
+                       --json number --jq '.[0].number // empty')
+
+          if [ -n "$existing" ]; then
+            # One running issue rather than a new one every Monday; the
+            # comment history doubles as the record of how long something
+            # has been outstanding.
+            gh issue comment "$existing" --body-file report.md
+            echo "commented on #$existing"
+          else
+            gh issue create \
+              --title "Dependencies need a look ($(date -u +%Y-%m-%d))" \
+              --label dependencies \
+              --body-file report.md
+          fi

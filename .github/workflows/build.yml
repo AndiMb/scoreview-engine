@@ -15,6 +15,12 @@ jobs:
       - name: Shadow drift guard
         run: tools/check-shadow-drift.sh
 
+      # Offline, sub-second: every version in tools/deps.json must match what
+      # the tree actually builds. Without this the inventory — and the weekly
+      # update check that reads it — drifts out of date unnoticed.
+      - name: Dependency manifest
+        run: python3 tools/check-deps.py --verify
+
       - name: Install toolchain
         run: |
           sudo apt-get update

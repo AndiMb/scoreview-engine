@@ -1,0 +1,149 @@
+{
+  "_comment": [
+    "Every dependency this engine builds against, and where its version is",
+    "written down in the tree. tools/check-deps.py verifies each 'verify'",
+    "rule offline (so this file cannot silently go stale) and queries each",
+    "'watch' rule online for newer releases and advisories.",
+    "docs/dependencies.md is the prose version of this file."
+  ],
+
+  "components": [
+    {
+      "name": "musescore",
+      "version": "4.7.4",
+      "kind": "submodule",
+      "location": "musescore",
+      "verify": { "rule": "submodule-tag", "path": "musescore" },
+      "watch": { "rule": "github-release", "repo": "musescore/MuseScore", "strip": "v" },
+      "cpe": "cpe:2.3:a:musescore:musescore",
+      "note": "A bump re-runs the corpus gate and re-derives every shadow copy (src/shadow/README.md). Not automatable."
+    },
+    {
+      "name": "freetype",
+      "version": "2.14.3",
+      "kind": "vendored",
+      "location": "thirdparty/freetype",
+      "verify": { "rule": "dirname", "glob": "thirdparty/freetype/freetype-*", "prefix": "freetype-" },
+      "watch": { "rule": "github-tag", "repo": "freetype/freetype", "pattern": "^VER-(\\d+)-(\\d+)-(\\d+)$" },
+      "cpe": "cpe:2.3:a:freetype:freetype",
+      "purl": "pkg:generic/freetype",
+      "security_critical": true,
+      "note": "Parses the woff2 resource pack and everything handed to addFont(). Vendored so it can be patched without a MuseScore bump; a bump changes glyph outlines, so it goes through the corpus gate."
+    },
+    {
+      "name": "harfbuzz",
+      "version": "12.3.0",
+      "kind": "fetched",
+      "location": "musescore/src/framework/draw/cmake/SetupHarfBuzz.cmake",
+      "verify": {
+        "rule": "regex",
+        "file": "musescore/src/framework/draw/cmake/SetupHarfBuzz.cmake",
+        "pattern": "harfbuzz/([0-9]+\\.[0-9]+\\.[0-9]+)"
+      },
+      "watch": { "rule": "muse-deps-dir", "repo": "musescore/muse_deps", "ref": "legacy", "path": "harfbuzz" },
+      "watch_upstream": { "rule": "github-release", "repo": "harfbuzz/harfbuzz" },
+      "cpe": "cpe:2.3:a:harfbuzz_project:harfbuzz",
+      "purl": "pkg:generic/harfbuzz",
+      "advisories_acknowledged": {
+        "OSV-2023-137": "Heap-buffer-overflow in OT::Layout::Common::Coverage::get_population. Shaping code, so it would be reachable — but it was fixed in 2023 and 12.3.0 is 4116 commits ahead of the fix (08784ba), 0 behind. OSV expresses the entry as a commit range, which is why a version query still matches it. False positive for this version; re-check on the next HarfBuzz bump.",
+        "OSV-2026-53": "Heap-use-after-free in graph::LigatureSubstFormat1::shrink — hb-subset. Unreachable here: the only HarfBuzz API this engine calls is the shaping one (hb_buffer_*, hb_ft_font_create, hb_shape); nothing anywhere calls hb_subset_*. The code is linked in because muse_deps builds the amalgamated source, not because anything reaches it.",
+        "OSV-2026-962": "Use-of-uninitialized-value in iup_delta_optimize — hb-subset variation optimization. Same reasoning as OSV-2026-53."
+      },
+      "note": "Comes from MuseScore's muse_deps channel and decides glyph advances, hence the layout the corpus baseline was measured against. Leaving the channel is possible (prefetch/ pre-seeds the archive) but invalidates the baseline."
+    },
+    {
+      "name": "brotli",
+      "version": "1.2.0",
+      "kind": "vendored",
+      "location": "thirdparty/brotli",
+      "verify": { "rule": "dirname", "glob": "thirdparty/brotli/brotli-*", "prefix": "brotli-" },
+      "watch": { "rule": "github-release", "repo": "google/brotli", "strip": "v" },
+      "cpe": "cpe:2.3:a:google:brotli",
+      "purl": "pkg:generic/brotli",
+      "security_critical": true,
+      "note": "Decoder only (c/common, c/dec). Decompresses woff2 tables, so it sees the same untrusted bytes FreeType does."
+    },
+    {
+      "name": "zlib",
+      "version": "1.3.1",
+      "kind": "toolchain-port",
+      "location": "-sUSE_ZLIB=1 (emscripten port, follows the emsdk pin)",
+      "verify": { "rule": "emscripten-port", "port": "zlib", "follows": "emsdk" },
+      "watch": { "rule": "github-release", "repo": "madler/zlib", "strip": "v" },
+      "cpe": "cpe:2.3:a:zlib:zlib",
+      "purl": "pkg:generic/zlib",
+      "security_critical": true,
+      "advisories_acknowledged": {
+        "CVE-2026-22184": "Global buffer overflow in contrib/untgz, CVSS 7.8. NVD's own text says it does not affect the core library, and the emscripten port compiles exactly fifteen core .c files (adler32, compress, crc32, deflate, gz*, inf*, trees, uncompr, zutil) — contrib/ is not built. Not applicable.",
+        "CVE-2026-27171": "Unbounded loop in x2nmodp, reached through crc32_combine64 / crc32_combine_gen64, CVSS 2.9. Nothing in this engine or in MuseScore calls either: the mscz path uses inflate only. Not reachable. (Taking 1.3.2 is still worth it for the 7ASecurity audit fixes — that is the emsdk item, tracked as version drift above, not as this CVE.)"
+      },
+      "note": "Reads the mscz container. Version is whatever the pinned emsdk ships, so the only way to move it is an emsdk bump. The native CLI links the distro zlib instead, which gets distro security updates."
+    },
+    {
+      "name": "msdfgen",
+      "version": "1.4",
+      "kind": "vendored-fork",
+      "location": "thirdparty/msdfgen",
+      "verify": { "rule": "dirname", "glob": "thirdparty/msdfgen/msdfgen-*", "prefix": "msdfgen-" },
+      "watch": { "rule": "frozen" },
+      "note": "A MuseScore-reworked 1.4, not stock: ifontface.h compares glyph shapes over its by-value EdgeSegment types, which do not exist upstream. Build-only — nothing in the conversion path calls FontsEngine::render(), so dead-code elimination strips it from the wasm. Deliberately frozen; see thirdparty/msdfgen/README.md."
+    },
+    {
+      "name": "emsdk",
+      "version": "4.0.7",
+      "kind": "toolchain",
+      "location": ".github/workflows/build.yml, tools/build-wasm-docker.sh",
+      "verify": {
+        "rule": "regex-all",
+        "files": [".github/workflows/build.yml", "tools/build-wasm-docker.sh"],
+        "pattern": "emscripten/emsdk:([0-9]+\\.[0-9]+\\.[0-9]+)"
+      },
+      "watch": { "rule": "emscripten-releases" },
+      "note": "Pins the wasm toolchain, and with it the zlib port and the float noise the wasm gate tolerates. A bump means re-measuring that gate."
+    },
+    {
+      "name": "ubuntu-runner",
+      "version": "24.04",
+      "kind": "ci-image",
+      "location": ".github/workflows/build.yml, Dockerfile",
+      "verify": {
+        "rule": "regex-all",
+        "files": [".github/workflows/build.yml", "Dockerfile"],
+        "pattern": "ubuntu[:-]([0-9]{2}\\.[0-9]{2})"
+      },
+      "watch": {
+        "rule": "eol-date",
+        "end": "2029-04-30",
+        "source": "Ubuntu 24.04 LTS standard support; runner retirement follows it"
+      },
+      "note": "Moved off 22.04 on 2026-08-30: those runners begin deprecation 2026-09-17 and are unsupported from 2027-04-17. g++-10 — still needed, a newer distro g++ trips over a missing <memory> in kors_logger — is present in 24.04 as 10.5.0, so the compiler pin survived the move. No feed publishes runner-image retirement in machine-readable form, hence the recorded date."
+    },
+    {
+      "name": "node",
+      "version": "22",
+      "kind": "ci-runtime",
+      "location": ".github/workflows/build.yml",
+      "verify": { "rule": "regex", "file": ".github/workflows/build.yml", "pattern": "node-version:\\s*([0-9]+)" },
+      "watch": { "rule": "nodejs-lts", "major": "22" },
+      "note": "The package declares engines >=18; ScoreView runs the wasm under Node. Watched by end of support, not by 'a newer major exists' — there always is one, and moving majors for its own sake buys nothing here."
+    },
+    {
+      "name": "rollup",
+      "version": "4.63.0",
+      "kind": "npm-dev",
+      "location": "web-public/package-lock.json",
+      "verify": { "rule": "npm-lock", "lock": "web-public/package-lock.json", "package": "rollup" },
+      "watch": { "rule": "dependabot" },
+      "note": "Bundles the JS wrapper. Build-time only; the published package has no runtime dependencies."
+    },
+    {
+      "name": "typescript",
+      "version": "7.0.2",
+      "kind": "npm-dev",
+      "location": "web-public/package-lock.json",
+      "verify": { "rule": "npm-lock", "lock": "web-public/package-lock.json", "package": "typescript" },
+      "watch": { "rule": "dependabot" },
+      "note": "Emits the .d.ts files. Build-time only."
+    }
+  ]
+}
