@@ -1,0 +1,9 @@
+# Vendored upstream sources are kept byte-identical to the signed release
+# tarballs they came from, and the READMEs next to them document a verification
+# recipe that says so: unpack the tarball, drop the same directories, diff -r.
+# End-of-line conversion would break that on any platform that checks out CRLF,
+# so it is switched off for those trees. Our own files beside them (README.md,
+# the wrapper CMakeLists) stay ordinary text.
+thirdparty/freetype/freetype-*/** -text
+thirdparty/brotli/brotli-*/**     -text
+thirdparty/msdfgen/msdfgen-*/**   -text

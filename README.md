@@ -37,11 +37,13 @@ when upstream drifts.
 
 * **Toolchain:** Emscripten only (wasm) / plain g++ (native CLI). FreeType,
   HarfBuzz and zlib, no Qt anywhere.
-* **Fonts:** woff2, read by FreeType with the brotli decoder vendored in
-  `thirdparty/brotli` — MuseScore's own FreeType wrapper disables brotli, so
-  the top-level CMakeLists configures FreeType itself (see
-  `src/shadow/README.md`). The same decoder is what lets a caller hand
-  `addFont()` a woff2 file.
+* **Fonts:** woff2, read by FreeType with the brotli decoder — both vendored
+  under `thirdparty/`, both configured by the top-level CMakeLists. MuseScore's
+  own FreeType wrapper disables brotli, which would leave FreeType unable to
+  read a single .woff2; the same decoder is what lets a caller hand `addFont()`
+  a woff2 file. FreeType is vendored rather than taken from the submodule
+  because it parses untrusted input and must be patchable on its own schedule
+  (`thirdparty/freetype/README.md`).
 * **API:** webmscore-compatible for the supported subset (SVG pages, MIDI,
   spos/mpos, metadata, extra fonts, `destroy()`). Audio, PNG/PDF and MusicXML
   methods throw a clear "not supported in this build" error.
@@ -171,4 +173,7 @@ that run's tarball to a GitHub Release.
 
 GPL-3.0 — see [LICENSE.txt](LICENSE.txt). Contains code from
 [MuseScore](https://github.com/musescore/MuseScore) (via submodule and
-shadow copies).
+shadow copies), and vendored third-party sources under `thirdparty/`:
+[FreeType](https://freetype.org) under the FreeType License,
+[brotli](https://github.com/google/brotli) under MIT, and msdfgen (MuseScore's
+rework) under MIT. Each carries its license text next to the code.

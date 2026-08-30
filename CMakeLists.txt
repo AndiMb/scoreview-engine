@@ -50,13 +50,17 @@ add_subdirectory(${MU_ROOT}/src/framework/global global)
 set(DRAW_NO_INTERNAL ON)
 add_subdirectory(${MU_ROOT}/src/framework/draw draw)
 
-# FreeType from the submodule tree — but configured here, not through
-# MuseScore's wrapper CMakeLists: that one sets FT_DISABLE_BROTLI, and without
-# brotli FreeType rejects every .woff2 (the resource pack below is woff2, and
-# addFont() takes whatever a caller hands it). The remaining options are the
-# wrapper's, and its blob is pinned in src/shadow/upstream.lock so a FreeType
-# bump — the version is part of the path — fails the drift guard instead of
-# silently building something else.
+# FreeType, vendored in thirdparty/freetype rather than taken from the
+# submodule. It is the one dependency here that parses attacker-shaped input
+# by design — the woff2 resource pack, and whatever a caller hands addFont() —
+# so it has to be updatable without waiting for a MuseScore bump. Upstream is
+# not a security channel for it either: muse_deps still pinned 2.14.1 in
+# August 2026, two security releases behind. Provenance, the signature check
+# and the refresh recipe: thirdparty/freetype/README.md.
+#
+# It was never MuseScore's wrapper CMakeLists that configured it anyway — that
+# one sets FT_DISABLE_BROTLI, and without brotli FreeType rejects every .woff2
+# (the resource pack is woff2). The options below have always been ours.
 add_subdirectory(thirdparty/brotli brotli)
 
 set(FT_DISABLE_ZLIB TRUE)
@@ -67,7 +71,7 @@ set(FT_DISABLE_BROTLI FALSE)
 set(FT_REQUIRE_BROTLI TRUE)   # cmake/FindBrotliDec.cmake answers this; a miss must fail loudly
 set(SKIP_INSTALL_ALL TRUE)
 
-set(FREETYPE_DIR ${MU_ROOT}/src/framework/draw/thirdparty/freetype/freetype-2.14.1)
+set(FREETYPE_DIR ${CMAKE_CURRENT_LIST_DIR}/thirdparty/freetype/freetype-2.14.3)
 add_subdirectory(${FREETYPE_DIR} freetype)
 if(COMMAND target_no_warning)
     target_no_warning(freetype -Wno-conversion)

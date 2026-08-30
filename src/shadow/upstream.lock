@@ -7,4 +7,3 @@ e5423e4b7ab02cb0e0f27b99f2ff2b123836e438 src/importexport/midi/internal/midishar
 e2cfe85c044ae6ef1ed0d068dd5ec905b36fbdb7 src/importexport/midi/internal/midishared/midievent.h
 adb88433950c794afc7432400c115dc64e458b8e src/framework/draw/internal/fontsengine.h
 c90ab68726009aa0640958df654bae2712cded18 src/framework/draw/internal/fontprovider.cpp
-175391b814d609e11761db54eb28d5c8f6aeb7fa src/framework/draw/thirdparty/freetype/CMakeLists.txt
