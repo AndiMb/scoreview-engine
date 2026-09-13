@@ -1,0 +1,197 @@
+name: MuseScore release
+
+# Daily watch on one dependency, and a draft pull request when it moves.
+#
+# dependencies.yml already notices a MuseScore release — but weekly, and into
+# a comment on whatever dependency issue happens to be open. 4.7.5 landed on a
+# Tuesday, the Monday run had been the day before, and nobody saw it for five
+# days. So: this one asks daily, asks about MuseScore only, and gets its own
+# issue with its own label instead of a line in a table.
+#
+# The pull request it opens is the mechanical half of the bump and nothing
+# else — version strings and the submodule gitlink (tools/bump-musescore.py,
+# fenced by tools/check-bump-diff.sh). The half that needs judgement, five
+# shadow copies and the corpus gate, is why the pull request is a draft. What
+# the automation actually buys is the CI run: check-shadow-drift.sh names
+# every drifted file and corpus-compare.py every deviation, so the work starts
+# from a list instead of a search.
+#
+# No secret anywhere. A branch pushed with GITHUB_TOKEN starts no workflow —
+# GitHub's recursion brake — but workflow_dispatch is explicitly exempt from
+# it, so the last step here dispatches build.yml on the new branch by hand.
+# That run shows up under Actions rather than in the pull request's checks;
+# both the pull request and the issue link to it.
+
+on:
+  schedule:
+    - cron: '23 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  propose:
+    runs-on: ubuntu-24.04
+    steps:
+      # No submodules, and none needed: the gitlink is written from the tag's
+      # commit sha below. Checking MuseScore out to move a pointer would cost
+      # some 800 MB for two lines of change.
+      - uses: actions/checkout@v7
+
+      - name: Has MuseScore moved?
+        id: check
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          status=0
+          python3 tools/check-deps.py --updates --only musescore --json > upstream.json || status=$?
+          # Same split as dependencies.yml: 1 means a dependency moved, 2
+          # means the checker broke. Only the second is a red build.
+          if [ "$status" != 0 ] && [ "$status" != 1 ]; then
+            echo "check-deps.py exited $status" >&2
+            exit 1
+          fi
+          cat upstream.json
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          c = json.load(open("upstream.json"))["components"][0]
+          print(f"behind={'yes' if c.get('behind') else 'no'}")
+          print(f"version={c.get('latest', '')}")
+          PY
+
+      - name: Resolve the release tag
+        id: tag
+        if: steps.check.outputs.behind == 'yes'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v${{ steps.check.outputs.version }}"
+          type=$(gh api "repos/musescore/MuseScore/git/ref/tags/$tag" --jq '.object.type')
+          sha=$(gh api "repos/musescore/MuseScore/git/ref/tags/$tag" --jq '.object.sha')
+          # MuseScore uses lightweight tags today, so .object is the commit.
+          # An annotated tag would put the tag object's sha here instead, and
+          # a gitlink pointing at a tag object is one no checkout can resolve.
+          if [ "$type" = "tag" ]; then
+            sha=$(gh api "repos/musescore/MuseScore/git/tags/$sha" --jq '.object.sha')
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "branch=musescore/${{ steps.check.outputs.version }}" >> "$GITHUB_OUTPUT"
+          echo "$tag -> $sha"
+
+      # Idempotence. This runs every day; the version stays new until the
+      # bump is merged, and a second pull request every morning would be
+      # worse than no automation at all. The pull request is checked too, not
+      # just the branch: closing a proposal without merging it is an answer,
+      # and the bot should not argue with it the next day.
+      - name: Already proposed?
+        id: gate
+        if: steps.check.outputs.behind == 'yes'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          branch="${{ steps.tag.outputs.branch }}"
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+            echo "branch $branch already exists"
+            echo "new=no" >> "$GITHUB_OUTPUT"
+          elif [ -n "$(gh pr list --head "$branch" --state all --json number --jq '.[0].number // empty')" ]; then
+            echo "a pull request for $branch already exists"
+            echo "new=no" >> "$GITHUB_OUTPUT"
+          else
+            echo "new=yes" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Bump the mechanical files
+        if: steps.gate.outputs.new == 'yes'
+        run: |
+          git update-index --add --cacheinfo 160000,${{ steps.tag.outputs.sha }},musescore
+          python3 tools/bump-musescore.py \
+            "${{ steps.check.outputs.version }}" "${{ steps.tag.outputs.sha }}"
+          git add tools/deps.json docs/dependencies.md README.md \
+                  web-public/package.json web-public/package-lock.json
+          # The fence. On a violation nothing is pushed and no pull request
+          # opens, because the next step never runs. Invoked through `sh`
+          # rather than directly: this repository is authored on Windows with
+          # core.filemode=false, so a new script's executable bit does not
+          # reach the index on its own.
+          sh tools/check-bump-diff.sh
+
+      - name: Open the draft, file the issue, start the build
+        if: steps.gate.outputs.new == 'yes'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.check.outputs.version }}
+          BRANCH: ${{ steps.tag.outputs.branch }}
+          SHA: ${{ steps.tag.outputs.sha }}
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          # Must not start with "release v": that prefix is what build.yml's
+          # publish job watches for on main.
+          git commit -m "musescore: bump the submodule to $VERSION (mechanical)"
+          git push origin "$BRANCH"
+
+          cat > pr.md <<EOF
+          Mechanical half of the MuseScore $VERSION bump, opened by
+          \`.github/workflows/musescore-release.yml\`. Submodule pinned to
+          \`$SHA\`; version strings in \`tools/deps.json\`,
+          \`docs/dependencies.md\`, \`README.md\` and the published package.
+
+          Nothing here has been reviewed against upstream. The bot is fenced
+          by \`tools/check-bump-diff.sh\` and cannot touch any of the below —
+          that is the work this draft exists for.
+
+          ## The human half
+
+          - [ ] \`tools/check-shadow-drift.sh\` green? For every file it names:
+                re-derive the shadow copy, re-check the forced prelude, or
+                re-copy the verbatim data file under \`resources/\`, then pin
+                the new blob id in \`src/shadow/upstream.lock\`
+                (\`git -C musescore rev-parse HEAD:<path>\`). The procedure is
+                in \`src/shadow/README.md\`, section "Drift guard".
+          - [ ] Corpus gate: judge every deviation on its own. A waiver needs
+                a reason in \`testdata/corpus-waivers.json\`, and a waiver
+                that stops firing is itself a failure — drop it.
+          - [ ] wasm gate: the wasm build must reproduce the native
+                fingerprints exactly.
+          - [ ] Release commit \`release v$VERSION-engine.1\` — the counter
+                goes back to 1 with the MuseScore version.
+          - [ ] ScoreView follows on its own once that release exists
+                (\`engine-release.yml\` there bumps the converter pin and the
+                sidecar AppImage together).
+
+          Your first commit on this branch makes CI run the ordinary way; the
+          run linked below was dispatched by hand for the same reason this
+          pull request has no checks of its own.
+          EOF
+
+          url=$(gh pr create --draft --base main --head "$BRANCH" \
+                  --title "musescore: bump the submodule to $VERSION (mechanical)" \
+                  --body-file pr.md)
+          echo "opened $url"
+
+          # workflow_dispatch is the one event GITHUB_TOKEN may still trigger.
+          # Needs `workflow_dispatch:` on build.yml, and that entry has to be
+          # on the default branch before this line can work at all.
+          gh workflow run build.yml --ref "$BRANCH" || \
+            echo "could not dispatch build.yml on $BRANCH - start it by hand" >&2
+
+          gh label create musescore-release \
+            --description "A new upstream MuseScore release is out" \
+            --color 1d76db 2>/dev/null || true
+
+          gh issue create \
+            --title "MuseScore $VERSION is out" \
+            --label musescore-release \
+            --body "Upstream released MuseScore $VERSION ($SHA).
+
+          The mechanical bump is prepared as a draft: $url
+
+          What is left is the judgement half — shadow copies, \`upstream.lock\`,
+          the corpus gate. The draft's checklist walks through it. The build
+          for the branch was dispatched under
+          [Actions](../../actions/workflows/build.yml); a red run there is the
+          expected first result and is the list of what drifted."

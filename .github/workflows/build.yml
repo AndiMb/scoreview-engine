@@ -3,6 +3,11 @@ name: Build
 on:
   push:
   pull_request:
+  # For musescore-release.yml. A branch pushed with GITHUB_TOKEN starts
+  # no workflow, but workflow_dispatch is exempt from that brake, so the
+  # bot can still get its draft pull request a build - and that build,
+  # naming every drifted file, is the whole point of the draft.
+  workflow_dispatch:
 
 jobs:
   native:

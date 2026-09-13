@@ -25,6 +25,11 @@ Two jobs, deliberately separate:
                 inapplicable finding that reappears every week trains everyone
                 to stop reading the report.
 
+Two switches cut across both jobs. --only NAME restricts the run to named
+components, and --json replaces the report with the same findings as data.
+Both exist for tools/bump-musescore.py, which must not parse prose to learn
+that MuseScore has moved; --json also wins over --markdown when both are given.
+
 Exit codes: 0 clean, 1 findings a human should read, 2 the check itself broke.
 The weekly workflow files an issue on 1 and goes red on 2. stdlib only, so it
 runs on a bare runner.
@@ -358,6 +363,10 @@ def main():
     ap.add_argument("--advisories", action="store_true", help="query OSV and NVD")
     ap.add_argument("--online", action="store_true", help="allow network during --verify")
     ap.add_argument("--markdown", action="store_true", help="emit a markdown report")
+    ap.add_argument("--only", action="append", metavar="NAME",
+                    help="restrict the run to this component (repeatable)")
+    ap.add_argument("--json", action="store_true", dest="as_json",
+                    help="emit the findings as JSON instead of a report")
     args = ap.parse_args()
 
     if not (args.verify or args.updates or args.advisories):
@@ -366,8 +375,23 @@ def main():
     global COMPONENTS
     COMPONENTS = json.loads(MANIFEST.read_text(encoding="utf-8"))["components"]
 
+    if args.only:
+        wanted = set(args.only)
+        unknown = wanted - {c["name"] for c in COMPONENTS}
+        if unknown:
+            # Exit 2, not 1: a name that is not in the manifest means the
+            # caller is wrong about the tree, which is a broken check rather
+            # than a dependency that moved.
+            print(f"no such component: {', '.join(sorted(unknown))}", file=sys.stderr)
+            return 2
+        COMPONENTS = [c for c in COMPONENTS if c["name"] in wanted]
+
     problems = []
     lines = []
+    # The same findings as the report, one record per component, for --json.
+    # Filled alongside the prose so the two can never disagree.
+    records = {c["name"]: {"name": c["name"], "current": c["version"]}
+               for c in COMPONENTS}
 
     def out(s=""):
         lines.append(s)
@@ -382,6 +406,8 @@ def main():
             out("|---|---|---|---|")
         for c in COMPONENTS:
             status, found, detail = verify_component(c, online)
+            records[c["name"]]["verify"] = {
+                "status": status, "found": found, "detail": detail}
             if status == "ok":
                 mark = "ok"
             elif status == "skip":
@@ -416,6 +442,9 @@ def main():
                     sec = " [security-critical]" if c.get("security_critical") else ""
                     problems.append(f"{c['name']}: {c['version']} -> {latest} available{sec}")
                 right = latest
+                records[c["name"]].update(
+                    kind="version", latest=latest, behind=behind,
+                    source=ans.get("source"))
 
             elif ans["kind"] == "eol":
                 days = ans["days"]
@@ -429,9 +458,14 @@ def main():
                     problems.append(f"{c['name']}: support ends {ans['eol']}, in {days} days ({ans['source']})")
                 else:
                     mark, right = "current", f"{ans['eol']} ({days} d)"
+                records[c["name"]].update(
+                    kind="eol", eol=ans["eol"], days=days, behind=False,
+                    source=ans.get("source"))
 
             else:
                 mark, right = "-", ans["reason"]
+                records[c["name"]].update(
+                    kind="none", reason=ans["reason"], behind=False)
 
             if args.markdown:
                 out(f"| `{c['name']}` | {c['version']} | {right} | {mark} |")
@@ -464,6 +498,13 @@ def main():
             known = set(c.get("advisories_acknowledged", {}))
 
             for feed, ids, err in hits:
+                records[c["name"]].setdefault("advisories", []).append({
+                    "feed": feed,
+                    "ids": ids or [],
+                    "fresh": [i for i in (ids or []) if i not in known],
+                    "acknowledged": [i for i in (ids or []) if i in known],
+                    "error": err,
+                })
                 if err:
                     detail = f"query failed ({err[:60]})"
                 elif ids:
@@ -481,6 +522,14 @@ def main():
                 else:
                     out(f"  {c['name']:16} {feed}: {detail}")
         out()
+
+    if args.as_json:
+        # No prose at all on this path: the caller is a script, and a
+        # stray human-readable line ahead of the document would break
+        # json.load on the other side.
+        print(json.dumps({"components": list(records.values()),
+                          "problems": problems}, indent=2))
+        return 1 if problems else 0
 
     print("\n".join(lines))
 
