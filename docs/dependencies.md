@@ -11,7 +11,7 @@ Native, and therefore part of the shipped wasm:
 
 | | In use | Where the version lives | How it moves |
 |---|---|---|---|
-| MuseScore | 4.7.4 | `musescore` submodule | manual; corpus gate + shadow copies re-derived |
+| MuseScore | 4.7.4 | `musescore` submodule | watched daily; mechanical bump automated, corpus gate + shadow copies by hand |
 | FreeType | 2.14.3 | `thirdparty/freetype/` | vendored, ours to bump |
 | HarfBuzz | 12.3.0 | `SetupHarfBuzz.cmake` (submodule) | MuseScore's muse_deps channel |
 | brotli | 1.2.0 | `thirdparty/brotli/` | vendored, ours to bump |
@@ -95,6 +95,12 @@ is the rule working as intended.
   the pinned emsdk's port file, queries OSV and NVD, and files one running
   GitHub issue when something has moved. A broken checker goes red instead, so
   the two failure modes stay distinguishable.
+* **Daily** (`musescore-release.yml`, 05:23 UTC): `--updates --only musescore
+  --json`, a single API call. MuseScore alone, because it is the one dependency
+  the weekly cadence kept missing: 4.7.5 appeared on a Tuesday, the Monday run
+  had been the day before, and the finding would then have arrived as a comment
+  on an issue that was already open. It gets its own label, its own issue, and a
+  draft pull request carrying the mechanical half of the bump.
 * **Continuously**: Dependabot, for npm and the actions.
 
 Set an `NVD_API_KEY` repository secret to lift the NVD rate limit; without it
@@ -146,8 +152,23 @@ to stand here guessed at it:
   gone stale. The artifact grew from 9.28 to 9.48 MB of wasm, the JS glue
   shrank slightly, the resource pack is unchanged.
 
-**MuseScore** — a bump re-runs the corpus gate and re-derives every shadow copy
-(`src/shadow/README.md`). Note that `main` no longer has `src/framework` at all:
+**MuseScore** — two halves, and only one of them is work. The mechanical half
+is automated: `musescore-release.yml` notices a release within a day and opens a
+draft pull request that moves the submodule gitlink and the version strings
+(`tools/bump-musescore.py`). It may write six paths and no others;
+`tools/check-bump-diff.sh` holds it to that against the index, so a violation
+pushes no branch at all. What the bot must never touch is
+`src/shadow/upstream.lock`, the shadow copies, `resources/` and the corpus
+baseline — a draft that arrived looking finished would be worse than no draft.
+
+The other half is why that pull request is a draft: re-derive every shadow copy,
+re-check the forced prelude, re-copy the verbatim data files under `resources/`,
+then re-run the corpus gate and judge each deviation on its own
+(`src/shadow/README.md`). The draft carries that as a checklist, and the build
+it dispatches names every drifted file, so the work starts from a list rather
+than a search.
+
+Note that `main` no longer has `src/framework` at all:
 the `muse_framework` split has landed, and there freetype, harfbuzz and msdfgen
 arrive through `require_dep()` from muse_deps rather than as vendored trees. The
 next submodule bump past 4.7.x therefore changes where the font stack comes

@@ -30,7 +30,7 @@
         "strip": "v"
       },
       "cpe": "cpe:2.3:a:musescore:musescore",
-      "note": "A bump re-runs the corpus gate and re-derives every shadow copy (src/shadow/README.md). Not automatable."
+      "note": "A bump re-runs the corpus gate and re-derives every shadow copy (src/shadow/README.md). Half of it is automated: musescore-release.yml watches daily and opens a draft PR with the submodule pin and the version strings (tools/bump-musescore.py, fenced by tools/check-bump-diff.sh). The shadow copies, upstream.lock, resources/ and the corpus baseline are judgement and stay manual - that is what the draft is for."
     },
     {
       "name": "freetype",
