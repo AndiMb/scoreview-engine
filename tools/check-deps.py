@@ -6,7 +6,9 @@ Two jobs, deliberately separate:
   --verify      Offline. Every version in tools/deps.json must match what the
                 tree actually builds. Cheap enough for every CI build, and it
                 is what keeps the manifest — and docs/dependencies.md with it —
-                from quietly going stale.
+                from quietly going stale. The exception is an entry whose
+                version reads "@tree": there the tree is the source of truth
+                and the manifest only records where to find it. See TRACKED.
 
   --updates     Online. Ask each upstream whether a newer release exists.
                 This is the *primary* security signal for the vendored C
@@ -51,6 +53,15 @@ import urllib.request
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 MANIFEST = ROOT / "tools" / "deps.json"
+
+# A version the manifest deliberately does not carry. Everything Dependabot
+# maintains has its version written in a lockfile the bot rewrites — and the
+# bot cannot rewrite deps.json, so a copy here is a second source of truth
+# that goes stale the moment a bump lands. rollup 4.63.1 (pull request #4)
+# was exactly that: a green dependency update held up by a manifest it was
+# not allowed to touch. Such an entry says "@tree", and the verify rule that
+# would otherwise have compared the two answers for it instead.
+TRACKED = "@tree"
 
 UA = "scoreview-engine-check-deps"
 TIMEOUT = 30
@@ -232,6 +243,29 @@ def verify_component(c, online):
     return "skip", None, f"no verify rule ({kind})"
 
 
+def resolve_tracked(components, online):
+    """Fill in the versions the manifest says "@tree" for.
+
+    Runs before everything else, so that every later section — the upstream
+    query, the advisory feeds, --json — sees a real version and none of them
+    has to know this sentinel exists. The verify pass is the one place that
+    does: it reports these as `tracked` rather than `ok`, because "matches
+    the tree" is not a statement worth making about a number that was just
+    read out of the tree.
+
+    A rule that cannot answer leaves the sentinel in place. That is a finding,
+    not a crash: the lockfile is gone or unreadable, which is worth a line in
+    the report and nothing more dramatic.
+    """
+    for c in components:
+        if c.get("version") != TRACKED:
+            continue
+        status, found, detail = verify_component(c, online)
+        c["tracked"] = {"found": found, "detail": detail, "rule_status": status}
+        if found is not None:
+            c["version"] = found
+
+
 # --------------------------------------------------------------------------
 # watch rules — what upstream has
 
@@ -386,6 +420,12 @@ def main():
             return 2
         COMPONENTS = [c for c in COMPONENTS if c["name"] in wanted]
 
+    online = args.online or args.updates or args.advisories
+
+    # Before records, before the report: an "@tree" entry has to have turned
+    # into a version by the time anything reads one.
+    resolve_tracked(COMPONENTS, online)
+
     problems = []
     lines = []
     # The same findings as the report, one record per component, for --json.
@@ -396,8 +436,6 @@ def main():
     def out(s=""):
         lines.append(s)
 
-    online = args.online or args.updates or args.advisories
-
     if args.verify:
         out("## Manifest vs. tree" if args.markdown else "== manifest vs. tree ==")
         if args.markdown:
@@ -405,21 +443,39 @@ def main():
             out("| dependency | declared | found | |")
             out("|---|---|---|---|")
         for c in COMPONENTS:
-            status, found, detail = verify_component(c, online)
+            tracked = c.get("tracked")
+            if tracked:
+                # Already read out of the tree by resolve_tracked. Asking the
+                # rule a second time would only compare the answer with itself.
+                found, detail = tracked["found"], tracked["detail"]
+                status = "tracked" if found is not None else "error"
+            else:
+                status, found, detail = verify_component(c, online)
             records[c["name"]]["verify"] = {
-                "status": status, "found": found, "detail": detail}
+                "status": status, "found": found, "detail": detail,
+                "tracked": bool(tracked)}
             if status == "ok":
                 mark = "ok"
             elif status == "skip":
                 mark = "skip"
+            elif status == "tracked":
+                mark = "tracked"
+            elif tracked:
+                mark = status.upper()
+                problems.append(
+                    f"{c['name']}: version is read from the tree, and the tree "
+                    f"does not say ({detail})")
             else:
                 mark = status.upper()
                 problems.append(f"{c['name']}: manifest says {c['version']}, tree says {found} ({detail})")
+            # "declared" is the wrong word for a tracked entry, and the mark
+            # in the last column is what says so.
+            declared = "(tree)" if tracked else c["version"]
             if args.markdown:
-                out(f"| `{c['name']}` | {c['version']} | {found or '-'} | {mark} |")
+                out(f"| `{c['name']}` | {declared} | {found or '-'} | {mark} |")
             else:
-                out(f"  {mark:8} {c['name']:16} declared {c['version']:10} found {found or '-'}"
-                    + (f"   [{detail}]" if status != "ok" else ""))
+                out(f"  {mark:8} {c['name']:16} declared {declared:10} found {found or '-'}"
+                    + (f"   [{detail}]" if status not in ("ok", "tracked") else ""))
         out()
 
     if args.updates:

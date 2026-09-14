@@ -192,7 +192,7 @@
     },
     {
       "name": "rollup",
-      "version": "4.63.0",
+      "version": "@tree",
       "kind": "npm-dev",
       "location": "web-public/package-lock.json",
       "verify": {
@@ -203,11 +203,11 @@
       "watch": {
         "rule": "dependabot"
       },
-      "note": "Bundles the JS wrapper. Build-time only; the published package has no runtime dependencies."
+      "note": "Bundles the JS wrapper. Build-time only; the published package has no runtime dependencies. Version is \"@tree\": Dependabot owns it, rewrites the lockfile and cannot rewrite this file, so a number here would only ever be the one before the last bump."
     },
     {
       "name": "typescript",
-      "version": "7.0.2",
+      "version": "@tree",
       "kind": "npm-dev",
       "location": "web-public/package-lock.json",
       "verify": {
@@ -218,7 +218,7 @@
       "watch": {
         "rule": "dependabot"
       },
-      "note": "Emits the .d.ts files. Build-time only."
+      "note": "Emits the .d.ts files. Build-time only. Version is \"@tree\", for the same reason as rollup."
     }
   ]
 }

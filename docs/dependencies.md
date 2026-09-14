@@ -29,7 +29,16 @@ Toolchain and CI:
 
 Build-time npm packages (`web-public`, none of them shipped — the wrapper is
 published as bundles) and the workflow's actions are covered by Dependabot:
-rollup 4.63.0, typescript 7.0.2, and actions on their current majors.
+rollup, typescript, and actions on their current majors.
+
+Those two are the only entries in `deps.json` without a version. They say
+`"@tree"` instead, and `web-public/package-lock.json` answers for them. The
+reason is that Dependabot rewrites the lockfile and is not allowed to rewrite
+the manifest: a number here would be a second source of truth that goes stale
+on the exact commit that updates the dependency, and `--verify` would then
+fail every dependency update for disagreeing with the update. It did, once —
+rollup 4.63.1, pull request #4, red for no other reason. A Dependabot pull
+request now needs no companion edit; merge it when CI is green.
 
 ## Why release currency is the primary signal
 
@@ -89,7 +98,9 @@ is the rule working as intended.
 * **Every build** (`build.yml`, native job): `check-deps.py --verify`. Offline,
   sub-second. Every version in the manifest must match what the tree actually
   builds — the directory name under `thirdparty/`, the pin in
-  `SetupHarfBuzz.cmake`, the image tag in the workflow, the lockfile entry.
+  `SetupHarfBuzz.cmake`, the image tag in the workflow. The npm entries are the
+  exception: they carry no version to compare, the lockfile supplies it, and
+  the report marks them `tracked` rather than `ok`.
 * **Weekly** (`dependencies.yml`, Mondays): `--verify --online --updates
   --advisories`. Asks each upstream for newer releases, resolves zlib against
   the pinned emsdk's port file, queries OSV and NVD, and files one running
@@ -173,6 +184,13 @@ the `muse_framework` split has landed, and there freetype, harfbuzz and msdfgen
 arrive through `require_dep()` from muse_deps rather than as vendored trees. The
 next submodule bump past 4.7.x therefore changes where the font stack comes
 from — which is one more reason FreeType now lives in this repository.
+
+**rollup, typescript** — Dependabot's, end to end. Build-time only and not
+shipped, so a bump is a green pull request and a merge; there is no manifest
+edit to make alongside it, by design (see the inventory above). What is worth
+checking before merging is that the pull request is still the current version
+— an update that sits open long enough gets overtaken, and Dependabot does not
+reliably raise the target of a pull request that is already open.
 
 **msdfgen** — deliberately frozen. It is a MuseScore rework of 1.4, not stock:
 `ifontface.h` compares glyph shapes over its by-value `EdgeSegment` types, which
