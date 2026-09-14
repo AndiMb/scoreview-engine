@@ -16,11 +16,18 @@ name: MuseScore release
 # every drifted file and corpus-compare.py every deviation, so the work starts
 # from a list instead of a search.
 #
-# No secret anywhere. A branch pushed with GITHUB_TOKEN starts no workflow —
-# GitHub's recursion brake — but workflow_dispatch is explicitly exempt from
-# it, so the last step here dispatches build.yml on the new branch by hand.
-# That run shows up under Actions rather than in the pull request's checks;
-# both the pull request and the issue link to it.
+# No secret anywhere. On the scheduled path nothing this job does starts a
+# workflow — GitHub's recursion brake, which suppresses events caused by
+# GITHUB_TOKEN — but workflow_dispatch is explicitly exempt from it, so the
+# last step here dispatches build.yml on the new branch by hand. That needs
+# `actions: write` above, and it shows up under Actions rather than in the
+# pull request's checks; both the pull request and the issue link to it.
+#
+# On a manual run the brake does not engage at all: the whole chain is
+# attributed to whoever pressed the button, so opening the draft starts an
+# ordinary `pull_request` build and the dispatch merely adds a second one.
+# That is why the 4.7.5 run still got a build with the dispatch returning 403,
+# and why that 403 would have gone unnoticed until the next release.
 
 on:
   schedule:
@@ -31,6 +38,10 @@ permissions:
   contents: write
   pull-requests: write
   issues: write
+  # For the `gh workflow run` at the end. An explicit block grants nothing it
+  # does not list, so without this line the dispatch is a 403 and the branch
+  # gets no build at all -- which is the one thing the draft exists to buy.
+  actions: write
 
 jobs:
   propose:
