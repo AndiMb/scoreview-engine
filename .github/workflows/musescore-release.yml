@@ -81,11 +81,24 @@ jobs:
           echo "branch=musescore/${{ steps.check.outputs.version }}" >> "$GITHUB_OUTPUT"
           echo "$tag -> $sha"
 
-      # Idempotence. This runs every day; the version stays new until the
-      # bump is merged, and a second pull request every morning would be
-      # worse than no automation at all. The pull request is checked too, not
-      # just the branch: closing a proposal without merging it is an answer,
-      # and the bot should not argue with it the next day.
+      # Idempotence, keyed on the last artifact a complete run produces rather
+      # than the first. This runs every day and the version stays new until the
+      # bump is merged, so a second proposal every morning would be worse than
+      # no automation at all — but the key has to be something that only exists
+      # once the run has finished.
+      #
+      # The 4.7.5 run is why. It pushed its branch and then died on `gh pr
+      # create`, because "Allow GitHub Actions to create and approve pull
+      # requests" was off. With the branch as the key, every run after it saw
+      # the branch, said "already proposed", and went green having produced no
+      # pull request and no issue. A red run had turned itself into a green one
+      # overnight, which is the one thing a watchdog must never do.
+      #
+      # So the key is the issue, and each step below asks for its own artifact
+      # and can be resumed. A branch without a pull request is not a proposal,
+      # it is debris from a run that did not get that far — and reusable as is,
+      # because the push is the last thing the bump does and check-bump-diff.sh
+      # has already fenced its contents by then.
       - name: Already proposed?
         id: gate
         if: steps.check.outputs.behind == 'yes'
@@ -93,18 +106,38 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           branch="${{ steps.tag.outputs.branch }}"
-          if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
-            echo "branch $branch already exists"
-            echo "new=no" >> "$GITHUB_OUTPUT"
-          elif [ -n "$(gh pr list --head "$branch" --state all --json number --jq '.[0].number // empty')" ]; then
-            echo "a pull request for $branch already exists"
-            echo "new=no" >> "$GITHUB_OUTPUT"
-          else
-            echo "new=yes" >> "$GITHUB_OUTPUT"
+          title="MuseScore ${{ steps.check.outputs.version }} is out"
+
+          # Closing a proposal without merging it is an answer, and the bot
+          # should not argue with it the next day. Merged means the bump has
+          # landed, and this job will stop finding a release to bump to anyway.
+          state=$(gh pr list --head "$branch" --state all --json state --jq '.[0].state // empty')
+          if [ "$state" = "CLOSED" ] || [ "$state" = "MERGED" ]; then
+            echo "the pull request for $branch is $state - leaving it alone"
+            echo "act=no" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
 
+          # No --label filter: the label is created by the run that files the
+          # first issue, and asking for one that does not exist yet is an error.
+          if gh issue list --state all --limit 200 --json title --jq '.[].title' \
+               | grep -Fxq "$title"; then
+            echo "\"$title\" has already been filed"
+            echo "act=no" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "act=yes" >> "$GITHUB_OUTPUT"
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+            echo "branch $branch is already pushed - reusing it"
+            echo "branch_exists=yes" >> "$GITHUB_OUTPUT"
+          else
+            echo "branch_exists=no" >> "$GITHUB_OUTPUT"
+          fi
+          echo "pr=$(gh pr list --head "$branch" --state open --json url --jq '.[0].url // empty')" >> "$GITHUB_OUTPUT"
+
       - name: Bump the mechanical files
-        if: steps.gate.outputs.new == 'yes'
+        if: steps.gate.outputs.act == 'yes' && steps.gate.outputs.branch_exists == 'no'
         run: |
           git update-index --add --cacheinfo 160000,${{ steps.tag.outputs.sha }},musescore
           python3 tools/bump-musescore.py \
@@ -118,21 +151,37 @@ jobs:
           # reach the index on its own.
           sh tools/check-bump-diff.sh
 
-      - name: Open the draft, file the issue, start the build
-        if: steps.gate.outputs.new == 'yes'
+      - name: Push the branch
+        if: steps.gate.outputs.act == 'yes' && steps.gate.outputs.branch_exists == 'no'
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "${{ steps.tag.outputs.branch }}"
+          # Must not start with "release v": that prefix is what build.yml's
+          # publish job watches for on main.
+          git commit -m "musescore: bump the submodule to ${{ steps.check.outputs.version }} (mechanical)"
+          git push origin "${{ steps.tag.outputs.branch }}"
+
+      - name: Open the draft
+        id: draft
+        if: steps.gate.outputs.act == 'yes'
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.check.outputs.version }}
           BRANCH: ${{ steps.tag.outputs.branch }}
           SHA: ${{ steps.tag.outputs.sha }}
+          EXISTING: ${{ steps.gate.outputs.pr }}
         run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -b "$BRANCH"
-          # Must not start with "release v": that prefix is what build.yml's
-          # publish job watches for on main.
-          git commit -m "musescore: bump the submodule to $VERSION (mechanical)"
-          git push origin "$BRANCH"
+          # Needs "Allow GitHub Actions to create and approve pull requests"
+          # (repository settings, Actions -> General). Without it this step is
+          # the one that fails, and the gate above is what makes sure the next
+          # run picks up where this one stopped instead of declaring victory.
+          if [ -n "$EXISTING" ]; then
+            echo "reusing $EXISTING"
+            echo "url=$EXISTING" >> "$GITHUB_OUTPUT"
+            echo "created=no" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
 
           cat > pr.md <<EOF
           Mechanical half of the MuseScore $VERSION bump, opened by
@@ -172,13 +221,32 @@ jobs:
                   --title "musescore: bump the submodule to $VERSION (mechanical)" \
                   --body-file pr.md)
           echo "opened $url"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "created=yes" >> "$GITHUB_OUTPUT"
 
+      # Only when the draft is new. The build costs half an hour, and once the
+      # proposal is open the branch's own commits start CI the ordinary way.
+      - name: Start the build
+        if: steps.draft.outputs.created == 'yes'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
           # workflow_dispatch is the one event GITHUB_TOKEN may still trigger.
           # Needs `workflow_dispatch:` on build.yml, and that entry has to be
           # on the default branch before this line can work at all.
-          gh workflow run build.yml --ref "$BRANCH" || \
-            echo "could not dispatch build.yml on $BRANCH - start it by hand" >&2
+          gh workflow run build.yml --ref "${{ steps.tag.outputs.branch }}" || \
+            echo "could not dispatch build.yml on ${{ steps.tag.outputs.branch }} - start it by hand" >&2
 
+      # Last, because the gate above keys on it: an issue means the run got
+      # all the way here.
+      - name: File the issue
+        if: steps.gate.outputs.act == 'yes'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.check.outputs.version }}
+          SHA: ${{ steps.tag.outputs.sha }}
+          URL: ${{ steps.draft.outputs.url }}
+        run: |
           gh label create musescore-release \
             --description "A new upstream MuseScore release is out" \
             --color 1d76db 2>/dev/null || true
@@ -188,7 +256,7 @@ jobs:
             --label musescore-release \
             --body "Upstream released MuseScore $VERSION ($SHA).
 
-          The mechanical bump is prepared as a draft: $url
+          The mechanical bump is prepared as a draft: $URL
 
           What is left is the judgement half — shadow copies, \`upstream.lock\`,
           the corpus gate. The draft's checklist walks through it. The build
