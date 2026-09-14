@@ -152,7 +152,10 @@ route to a newer zlib is an emsdk bump.
 step was a patch: emscripten 6.0.9 marks `WASM_BINDGEN` experimental and gives
 `-sCROSS_ORIGIN_STORAGE` its streaming path back, and this build sets neither.
 zlib did not move with it — the port file names 1.3.2 with the same hash under
-both. The bump is therefore a pin change and a wasm gate run, nothing else.
+both. The bump was therefore a pin change and a wasm gate run, and the gate
+answered: the same eleven waivers fire on the same eleven scores, with byte
+counts identical to the last 6.0.8 run down to the last SVG byte. The float
+noise did not move.
 
 The jump before it, 4.0.7 → 6.0.8 on 2026-08-30, was the one that cost
 something — two majors, and worth keeping on the record since the note that
