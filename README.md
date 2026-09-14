@@ -5,12 +5,14 @@ engine for [ScoreView](https://github.com/AndiMb/scoreview). Takes `.mscz`
 files and produces SVG pages, MIDI, playback positions (spos/mpos) and
 metadata JSON. No Qt, no audio synthesis, no UI.
 
-Releases are npm tarballs attached to GitHub Releases (`v4.7.4-engine.N`),
+Releases are npm tarballs attached to GitHub Releases (`v4.7.5-engine.N`),
 API-compatible with [webmscore](https://github.com/LibreScore/webmscore) for
 the surface they support; ScoreView's server-side `local` conversion backend runs
 on them. Every release comes out of a CI run whose corpus gate passed: all
-569 vtest scores converted natively and under Node, fingerprinted against the
-released Qt webmscore.
+570 vtest scores converted natively and under Node, fingerprinted against the
+released Qt webmscore — bar `guitarDive-3.mscz`, which arrived with MuseScore
+4.7.5, after that Qt build was gone. Its fingerprint is our own; the baseline's
+`module` line says so.
 
 ## Architecture
 
@@ -20,7 +22,7 @@ with a forced prelude header, or shadow-copied into `src/shadow/` with a
 documented diff. CI diffs every shadow copy against the submodule and fails
 when upstream drifts.
 
-    ├── musescore/            # submodule, pinned to an upstream release tag (v4.7.4)
+    ├── musescore/            # submodule, pinned to an upstream release tag (v4.7.5)
     ├── src/
     │   ├── platform/         # IFileSystem, MD4 - the muse_global interfaces Qt owned
     │   ├── config/           # IEngravingConfiguration, fonts init

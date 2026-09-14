@@ -11,7 +11,7 @@ Native, and therefore part of the shipped wasm:
 
 | | In use | Where the version lives | How it moves |
 |---|---|---|---|
-| MuseScore | 4.7.4 | `musescore` submodule | watched daily; mechanical bump automated, corpus gate + shadow copies by hand |
+| MuseScore | 4.7.5 | `musescore` submodule | watched daily; mechanical bump automated, corpus gate + shadow copies by hand |
 | FreeType | 2.14.3 | `thirdparty/freetype/` | vendored, ours to bump |
 | HarfBuzz | 12.3.0 | `SetupHarfBuzz.cmake` (submodule) | MuseScore's muse_deps channel |
 | brotli | 1.2.0 | `thirdparty/brotli/` | vendored, ours to bump |

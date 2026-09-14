@@ -1,6 +1,6 @@
 {
     "name": "scoreview-engine",
-    "version": "4.7.4",
+    "version": "4.7.5",
     "description": "MuseScore's engraving engine in WebAssembly, without Qt. Read mscz data, generate SVG/MIDI/positions/metadata in browsers and Node. API-compatible successor of webmscore for that surface.",
     "type": "module",
     "types": "./src/index.d.ts",

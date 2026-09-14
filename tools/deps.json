@@ -9,13 +9,13 @@
   "components": [
     {
       "name": "musescore",
-      "version": "4.7.4",
+      "version": "4.7.5",
       "kind": "submodule",
       "location": "musescore",
       "verify": {
         "rule": "submodule-pin",
         "path": "musescore",
-        "commit": "7688c005ad963ba09ee715aae53dbc7e8c9d5ef8",
+        "commit": "3654226c2e99289916916953a98e585a3d3b315a",
         "version_file": "version.cmake",
         "patterns": [
           "MUSE_APP_VERSION_MAJOR\\s+\"([0-9]+)\"",
