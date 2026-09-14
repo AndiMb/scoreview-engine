@@ -9,8 +9,10 @@ Releases are npm tarballs attached to GitHub Releases (`v4.7.5-engine.N`),
 API-compatible with [webmscore](https://github.com/LibreScore/webmscore) for
 the surface they support; ScoreView's server-side `local` conversion backend runs
 on them. Every release comes out of a CI run whose corpus gate passed: all
-569 vtest scores converted natively and under Node, fingerprinted against the
-released Qt webmscore.
+570 vtest scores converted natively and under Node, fingerprinted against the
+released Qt webmscore — bar `guitarDive-3.mscz`, which arrived with MuseScore
+4.7.5, after that Qt build was gone. Its fingerprint is our own; the baseline's
+`module` line says so.
 
 ## Architecture
 

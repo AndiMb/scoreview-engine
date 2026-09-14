@@ -1,5 +1,5 @@
 {
- "module": "webmscore v4.7.4-scoreview.7 (Qt) \u2014 corpus.cjs fingerprints over vtest/scores, generated 2026-08-29",
+ "module": "webmscore v4.7.4-scoreview.7 (Qt) \u2014 corpus.cjs fingerprints over vtest/scores, generated 2026-08-29; guitarDive-3.mscz self-recorded from the native build at MuseScore 4.7.5, no Qt reference exists for it",
  "scores": {
   "accidental-11.mscz": {
    "pages": 1,
@@ -6912,6 +6912,37 @@
     "textFramesData": 4,
     "timesig": "4/4",
     "tracks": 3
+   }
+  },
+  "guitarDive-3.mscz": {
+   "pages": 1,
+   "measures": 3,
+   "parts": 1,
+   "posElements": 3,
+   "posMeasures": 3,
+   "segElements": 6,
+   "midiBytes": 1324,
+   "svgBytes": 13869,
+   "meta": {
+    "composer": "Compositor / arreglista",
+    "duration": 6,
+    "fileVersion": 470,
+    "hasHarmonies": "false",
+    "hasLyrics": "false",
+    "keysig": 0,
+    "lyrics": "",
+    "measures": 3,
+    "pageFormat": 3,
+    "pages": 1,
+    "parts": 1,
+    "poet": "",
+    "previousSource": "",
+    "subtitle": "",
+    "tempo": 0,
+    "tempoText": "",
+    "textFramesData": 4,
+    "timesig": "4/4",
+    "tracks": 0
    }
   },
   "hairpins-3.mscz": {
