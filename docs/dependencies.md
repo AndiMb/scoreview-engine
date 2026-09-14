@@ -22,7 +22,7 @@ Toolchain and CI:
 
 | | In use | Where |
 |---|---|---|
-| emsdk / Emscripten | 6.0.8 | `build.yml`, `tools/build-wasm-docker.sh` |
+| emsdk / Emscripten | 6.0.9 | `build.yml`, `tools/build-wasm-docker.sh` |
 | Ubuntu | 24.04 | `build.yml`, `Dockerfile` |
 | g++ | 10 | `Dockerfile` |
 | Node | 22 (supported to 2027-04-30) | `build.yml`; package declares `engines: >=18` |
@@ -148,9 +148,15 @@ port ships, today 1.3.2 (the release carrying the 7ASecurity audit fixes); the
 native CLI links the distro package and gets distro security updates. The only
 route to a newer zlib is an emsdk bump.
 
-**emsdk** — 6.0.8, moved there from 4.0.7 on 2026-08-30, two majors, and the
-reason zlib is current. What the jump actually cost, since the note that used
-to stand here guessed at it:
+**emsdk** — 6.0.9 since 2026-09-14, and the reason zlib is current. That last
+step was a patch: emscripten 6.0.9 marks `WASM_BINDGEN` experimental and gives
+`-sCROSS_ORIGIN_STORAGE` its streaming path back, and this build sets neither.
+zlib did not move with it — the port file names 1.3.2 with the same hash under
+both. The bump is therefore a pin change and a wasm gate run, nothing else.
+
+The jump before it, 4.0.7 → 6.0.8 on 2026-08-30, was the one that cost
+something — two majors, and worth keeping on the record since the note that
+used to stand here guessed at it:
 
 * Three link settings in `CMakeLists.txt` had gone: `USE_ES6_IMPORT_META`,
   and `NODEJS_CATCH_EXIT` / `NODEJS_CATCH_REJECTION`, removed in 5.0.3. All

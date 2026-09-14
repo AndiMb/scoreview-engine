@@ -99,7 +99,7 @@ jobs:
       # workspace mounted into it. Same invocation as tools/build-wasm-docker.sh.
       - name: Build wasm
         run: |
-          docker run --rm -v "${{ github.workspace }}:/src" emscripten/emsdk:6.0.8 bash -c '
+          docker run --rm -v "${{ github.workspace }}:/src" emscripten/emsdk:6.0.9 bash -c '
             set -e
             emcmake cmake -S /src -B /src/build-wasm -DCMAKE_BUILD_TYPE=Release
             cmake --build /src/build-wasm --target scoreview -- -j "$(nproc)"

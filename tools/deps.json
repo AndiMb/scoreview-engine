@@ -138,7 +138,7 @@
     },
     {
       "name": "emsdk",
-      "version": "6.0.8",
+      "version": "6.0.9",
       "kind": "toolchain",
       "location": ".github/workflows/build.yml, tools/build-wasm-docker.sh",
       "verify": {
