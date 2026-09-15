@@ -7,25 +7,58 @@
 // NotSupported. Qrc-style ":/..." resource paths are remapped onto a real
 // directory (resources/ in this repo), the same pattern as the fork's
 // web/webfilesystem.h.
+//
+// Reads are confined to the roots the caller opens: the resource directory,
+// and whatever allowRead() adds (the score, a font handed to addFont). See
+// resolve() for why that is not optional.
 
 #include <filesystem>
 #include <fstream>
+#include <string>
+#include <system_error>
+#include <vector>
 
 #include "global/io/ifilesystem.h"
+
+#include "log.h"
 
 namespace sve {
 class EngineFileSystem : public muse::io::IFileSystem
 {
 public:
-    EngineFileSystem() = default;
-
     explicit EngineFileSystem(const std::string& resourceRoot)
-        : m_resourceRoot(resourceRoot) {}
+        : m_resourceRoot(normalize(resourceRoot))
+    {
+        if (!m_resourceRoot.empty()) {
+            m_allowed.push_back(m_resourceRoot);
+        }
+    }
+
+    //! Permit reads of `path` — that file, or everything under it when it is a
+    //! directory. Called for the score being converted and for fonts the
+    //! caller registers; nothing else in this build opens a root.
+    void allowRead(const muse::io::path_t& path)
+    {
+        std::string p = normalize(path.toStdString());
+        if (p.empty()) {
+            return;
+        }
+        for (const std::string& root : m_allowed) {
+            if (p == root) {
+                return;
+            }
+        }
+        m_allowed.push_back(std::move(p));
+    }
 
     muse::Ret exists(const muse::io::path_t& path) const override
     {
+        const std::string real = resolve(path);
+        if (real.empty()) {
+            return muse::make_ret(muse::Ret::Code::UnknownError);
+        }
         std::error_code ec;
-        bool ok = std::filesystem::exists(resolve(path), ec);
+        bool ok = std::filesystem::exists(real, ec);
         return muse::make_ret(ok ? muse::Ret::Code::Ok : muse::Ret::Code::UnknownError);
     }
 
@@ -38,14 +71,26 @@ public:
 
     muse::Ret readFile(const muse::io::path_t& filePath, muse::ByteArray& data) const override
     {
-        std::ifstream f(resolve(filePath), std::ios::binary | std::ios::ate);
+        const std::string real = resolve(filePath);
+        if (real.empty()) {
+            return muse::make_ret(muse::Ret::Code::UnknownError, "refused read " + filePath.toStdString());
+        }
+        std::ifstream f(real, std::ios::binary | std::ios::ate);
         if (!f.is_open()) {
             return muse::make_ret(muse::Ret::Code::UnknownError, "failed open " + filePath.toStdString());
         }
-        std::streamsize size = f.tellg();
+        // tellg() answers -1 when the seek failed, and a directory gets this
+        // far on glibc: the open succeeds, the seek does not. The old cast
+        // straight to size_t turned that into a resize() of 2^64-1 bytes —
+        // std::length_error in the middle of a load, for a path that simply
+        // was not a file.
+        const std::streamoff size = f.tellg();
+        if (size < 0) {
+            return muse::make_ret(muse::Ret::Code::UnknownError, "failed size " + filePath.toStdString());
+        }
         f.seekg(0, std::ios::beg);
         data.resize(static_cast<size_t>(size));
-        if (!f.read(reinterpret_cast<char*>(data.data()), size)) {
+        if (size > 0 && !f.read(reinterpret_cast<char*>(data.data()), size)) {
             return muse::make_ret(muse::Ret::Code::UnknownError, "failed read " + filePath.toStdString());
         }
         return muse::make_ret(muse::Ret::Code::Ok);
@@ -54,8 +99,14 @@ public:
     muse::RetVal<uint64_t> fileSize(const muse::io::path_t& path) const override
     {
         muse::RetVal<uint64_t> rv;
+        const std::string real = resolve(path);
+        if (real.empty()) {
+            rv.ret = muse::make_ret(muse::Ret::Code::UnknownError);
+            rv.val = 0;
+            return rv;
+        }
         std::error_code ec;
-        uint64_t size = std::filesystem::file_size(resolve(path), ec);
+        uint64_t size = std::filesystem::file_size(real, ec);
         rv.ret = muse::make_ret(ec ? muse::Ret::Code::UnknownError : muse::Ret::Code::Ok);
         rv.val = ec ? 0 : size;
         return rv;
@@ -95,15 +146,83 @@ public:
 private:
     static muse::Ret notSupported() { return muse::make_ret(muse::Ret::Code::NotSupported); }
 
+    //! An engine path mapped onto a real one, or "" when the engine may not
+    //! read it.
+    //!
+    //! Two jobs. The qrc remap, ":/x" -> <resourceRoot>/x, is what this class
+    //! was written for. The confinement is the other one, and it is not
+    //! belt-and-braces: `chordDescriptionFile` is a STYLE value, so it comes
+    //! out of the .mscx, and upstream's ChordList::read() pastes a relative
+    //! one behind ":/engraving/styles/" without normalizing it
+    //! (dom/chordlist.cpp). Plain concatenation let "../../../../etc/passwd"
+    //! out of the resource tree and into an XML parser. Normalizing alone
+    //! would not close it either — the same style value written as an
+    //! absolute path never reaches the qrc branch at all — so every read is
+    //! tested against the roots the caller opened, and the engine gets no
+    //! others. The wasm build was always confined by MEMFS; this is what the
+    //! native CLI and the sidecar were missing.
+    //!
+    //! Lexical normalization, not weakly_canonical: a score cannot plant a
+    //! symlink on the host, resolving them would cost a stat per read, and
+    //! MEMFS has none to follow anyway.
     std::string resolve(const muse::io::path_t& path) const
     {
-        const std::string& s = path.toStdString();
+        const std::string s = path.toStdString();
+        if (s.empty()) {
+            return std::string();
+        }
+
+        std::string mapped = s;
         if (!m_resourceRoot.empty() && s.rfind(":/", 0) == 0) {
-            return m_resourceRoot + s.substr(1);
+            mapped = m_resourceRoot + s.substr(1);
+        }
+
+        const std::string full = normalize(mapped);
+        if (full.empty()) {
+            return std::string();
+        }
+        for (const std::string& root : m_allowed) {
+            if (isWithin(full, root)) {
+                return full;
+            }
+        }
+        LOGW() << "refusing a read outside the opened roots: " << s;
+        return std::string();
+    }
+
+    //! Absolute and free of "." / "..", with no trailing separator. Empty when
+    //! the path cannot be made absolute at all.
+    static std::string normalize(const std::string& p)
+    {
+        if (p.empty()) {
+            return std::string();
+        }
+        std::error_code ec;
+        const std::filesystem::path abs = std::filesystem::absolute(std::filesystem::path(p), ec);
+        if (ec) {
+            return std::string();
+        }
+        std::string s = abs.lexically_normal().generic_string();
+        while (s.size() > 1 && s.back() == '/') {
+            s.pop_back();
         }
         return s;
     }
 
+    //! `path` is `root` itself or sits under it. The separator test is what
+    //! keeps "/srv/resources-backup" from counting as inside "/srv/resources".
+    static bool isWithin(const std::string& path, const std::string& root)
+    {
+        if (path == root) {
+            return true;
+        }
+        if (path.size() <= root.size() || path.compare(0, root.size(), root) != 0) {
+            return false;
+        }
+        return path[root.size()] == '/' || (root.size() == 1 && root[0] == '/');
+    }
+
     std::string m_resourceRoot;
+    std::vector<std::string> m_allowed;
 };
 }

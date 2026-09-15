@@ -9,11 +9,18 @@ on:
   # naming every drifted file, is the whole point of the draft.
   workflow_dispatch:
 
+# Read-only by default; the one job that needs more says so itself. Without
+# this block every job here runs with whatever the repository's default
+# happens to be, which for an older repository is read/write on everything --
+# on a workflow that builds pull requests from forks.
+permissions:
+  contents: read
+
 jobs:
   native:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           submodules: true
 
@@ -45,6 +52,14 @@ jobs:
           cmake -S . -B build -GNinja -DCMAKE_BUILD_TYPE=Debug
           ninja -C build
 
+      # Half a second, and the only coverage some of this code has. The corpus
+      # gate is an end-to-end comparison over whatever the 570 vtest scores
+      # happen to contain, and none of them carries a picture -- so the header
+      # probe, the one loop here that walks attacker-shaped bytes, is checked
+      # nowhere else. Cheap and specific, so it runs before the slow gates.
+      - name: Unit tests
+        run: build/sve_tests
+
       - name: Convert test score
         run: |
           build/mscz2media testdata/repeat-test.mscz --resources resources --out build/out --drawdata --midi --spos --mpos --meta --svg
@@ -72,7 +87,7 @@ jobs:
             --allow-meta tracks --waivers testdata/corpus-waivers.json
 
       - name: Upload native corpus report
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: corpus-native
           path: build/corpus-native.json
@@ -83,7 +98,7 @@ jobs:
     runs-on: ubuntu-24.04
     needs: native
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           submodules: true
 
@@ -98,15 +113,21 @@ jobs:
       # release since 2021 and was referenced by a moving tag, with the
       # workspace mounted into it. Same invocation as tools/build-wasm-docker.sh.
       - name: Build wasm
+        env:
+          # Through the environment rather than an expression pasted into the
+          # shell. The value is GitHub's own and harmless, but a `run:` body is
+          # not the place to learn that the hard way -- see the note at the top
+          # of musescore-release.yml.
+          WORKSPACE: ${{ github.workspace }}
         run: |
-          docker run --rm -v "${{ github.workspace }}:/src" emscripten/emsdk:6.0.9 bash -c '
+          docker run --rm -v "$WORKSPACE:/src" emscripten/emsdk:6.0.9 bash -c '
             set -e
             emcmake cmake -S /src -B /src/build-wasm -DCMAKE_BUILD_TYPE=Release
             cmake --build /src/build-wasm --target scoreview -- -j "$(nproc)"
             cp /src/build-wasm/scoreview.lib.js /src/build-wasm/scoreview.lib.wasm /src/build-wasm/scoreview.lib.data /src/web-public/
           '
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
         with:
           node-version: 22
 
@@ -117,7 +138,7 @@ jobs:
           npm run build
 
       - name: Download native corpus report
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
         with:
           name: corpus-native
 
@@ -132,7 +153,7 @@ jobs:
         run: npm pack
 
       - name: Upload npm tarball
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: npm-pack
           path: web-public/scoreview-engine-*.tgz
@@ -148,7 +169,7 @@ jobs:
       contents: write
     steps:
       - name: Download npm tarball
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
         with:
           name: npm-pack
 
@@ -161,7 +182,7 @@ jobs:
           echo "$VERSION"
 
       - name: Publish to GitHub Releases
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64  # v3.0.3
         with:
           files: scoreview-engine-*.tgz
           name: scoreview-engine ${{ env.VERSION }}

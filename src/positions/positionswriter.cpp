@@ -147,11 +147,18 @@ static void writeMeasuresPositions(JsonObject& json, const Score* score)
     json.set("elements", elements);
 }
 
-static void writeEventsPositions(JsonObject& json, const Score* score, PositionsWriter::ElementType elementType)
+// Takes the MasterScore openly instead of reaching for it through the const
+// Score*. The repeat list read below has to be the expanded one, and that is a
+// setting on the master score rather than a read - harmless to leave behind,
+// because CompatMidiRender::renderScore sets it from saveMidi's own argument
+// before every export, but a mutation hiding behind a const pointer is one
+// nobody reading the signature would expect.
+static void writeEventsPositions(JsonObject& json, MasterScore* master, const Score* score,
+                                 PositionsWriter::ElementType elementType)
 {
     JsonArray events;
 
-    score->masterScore()->setExpandRepeats(true);
+    master->setExpandRepeats(true);
 
     std::unordered_map<const Segment*, int> segmentIds;
     std::unordered_map<const Measure*, int> measureIds;
@@ -208,7 +215,7 @@ ByteArray PositionsWriter::json(const Score* score) const
     } else {
         writeMeasuresPositions(json, score);
     }
-    writeEventsPositions(json, score, m_elementType);
+    writeEventsPositions(json, score->masterScore(), score, m_elementType);
     writePageSize(json, score);
 
     return JsonDocument(json).toJson(JsonDocument::Format::Compact);

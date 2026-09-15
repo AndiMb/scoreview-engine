@@ -36,6 +36,22 @@ let _hasLogLevelSet = false
 const _registeredFonts = new Set()
 
 /**
+ * The name each font buffer already got, so the same array handed to a second
+ * `load()` costs a lookup instead of another pass over its bytes.
+ *
+ * A WeakMap, so holding the name here never keeps the caller's buffer alive.
+ * The content key below stays the authority - two different arrays with the
+ * same bytes still resolve to the same file - this only skips recomputing it
+ * for the array we have already seen. That matters for the server-side case
+ * this engine exists for: a CJK fallback font is tens of megabytes, the same
+ * array is passed for every score, and hashing it per conversion was pure
+ * overhead on the critical path.
+ *
+ * @type {WeakMap<Uint8Array, string>}
+ */
+const _fontNames = new WeakMap()
+
+/**
  * FNV-1a over the font bytes. Only needs to separate different fonts from one
  * another, never to resist anything.
  * @param {Uint8Array} data
@@ -48,6 +64,20 @@ const contentKey = (data) => {
         h = Math.imul(h, 0x01000193)
     }
     return (h >>> 0).toString(36)
+}
+
+/**
+ * The virtual-file-system name for a font buffer, computed once per buffer.
+ * @param {Uint8Array} data
+ * @returns {string}
+ */
+const fontName = (data) => {
+    let name = _fontNames.get(data)
+    if (name === undefined) {
+        name = `font-${data.length}-${contentKey(data)}`
+        _fontNames.set(data, name)
+    }
+    return name
 }
 
 class WebMscore {
@@ -173,7 +203,7 @@ class WebMscore {
             // lazily from it - so a random name meant `load()` dropped another
             // copy of the same font into the virtual file system on every
             // single call, for the life of the module.
-            const name = `font-${font.length}-${contentKey(font)}`
+            const name = fontName(font)
             if (_registeredFonts.has(name)) {
                 return true
             }

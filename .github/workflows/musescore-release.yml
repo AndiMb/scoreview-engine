@@ -16,6 +16,14 @@ name: MuseScore release
 # every drifted file and corpus-compare.py every deviation, so the work starts
 # from a list instead of a search.
 #
+# Every value that comes from upstream -- the release tag, and the commit sha
+# it resolves to -- is shape-checked in the first step and travels through
+# `env:` from there on. It is GitHub's answer about a repository nobody here
+# controls, it reaches five shells and a submodule pin below, and
+# tools/bump-musescore.py's own VERSION_RE would only ever see it at the end
+# of that chain. A tag carrying a newline forges further step outputs; one
+# carrying a quote is parsed as shell, in a job holding `contents: write`.
+#
 # No secret anywhere. On the scheduled path nothing this job does starts a
 # workflow — GitHub's recursion brake, which suppresses events caused by
 # GITHUB_TOKEN — but workflow_dispatch is explicitly exempt from it, so the
@@ -50,7 +58,7 @@ jobs:
       # No submodules, and none needed: the gitlink is written from the tag's
       # commit sha below. Checking MuseScore out to move a pointer would cost
       # some 800 MB for two lines of change.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       - name: Has MuseScore moved?
         id: check
@@ -67,10 +75,19 @@ jobs:
           fi
           cat upstream.json
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
-          import json
+          import json, re, sys
           c = json.load(open("upstream.json"))["components"][0]
-          print(f"behind={'yes' if c.get('behind') else 'no'}")
-          print(f"version={c.get('latest', '')}")
+          behind = "yes" if c.get("behind") else "no"
+          version = c.get("latest") or ""
+          # The gate for everything below. check-deps.py hands the release tag
+          # over exactly as GitHub gave it (github-release rule: tag_name minus
+          # the "v"), and nothing downstream re-checks it in time. Refuse
+          # rather than sanitize - a MuseScore release that is not X.Y.Z is
+          # something a person should look at, not something to paper over.
+          if behind == "yes" and not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version):
+              sys.exit(f"upstream tag is not a MuseScore version: {version!r}")
+          print(f"behind={behind}")
+          print(f"version={version}")
           PY
 
       - name: Resolve the release tag
@@ -78,8 +95,9 @@ jobs:
         if: steps.check.outputs.behind == 'yes'
         env:
           GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.check.outputs.version }}
         run: |
-          tag="v${{ steps.check.outputs.version }}"
+          tag="v$VERSION"
           type=$(gh api "repos/musescore/MuseScore/git/ref/tags/$tag" --jq '.object.type')
           sha=$(gh api "repos/musescore/MuseScore/git/ref/tags/$tag" --jq '.object.sha')
           # MuseScore uses lightweight tags today, so .object is the commit.
@@ -88,8 +106,15 @@ jobs:
           if [ "$type" = "tag" ]; then
             sha=$(gh api "repos/musescore/MuseScore/git/tags/$sha" --jq '.object.sha')
           fi
+          # The other half of the upstream answer, and the one that becomes a
+          # gitlink below. Full 40 hex or nothing - the same rule
+          # bump-musescore.py applies to the copy it writes into deps.json.
+          case "$sha" in
+            "" | *[!0-9a-f]*) echo "not a commit sha: $sha" >&2; exit 1 ;;
+          esac
+          [ ${#sha} -eq 40 ] || { echo "not a full commit sha: $sha" >&2; exit 1; }
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
-          echo "branch=musescore/${{ steps.check.outputs.version }}" >> "$GITHUB_OUTPUT"
+          echo "branch=musescore/$VERSION" >> "$GITHUB_OUTPUT"
           echo "$tag -> $sha"
 
       # Idempotence, keyed on the last artifact a complete run produces rather
@@ -115,9 +140,11 @@ jobs:
         if: steps.check.outputs.behind == 'yes'
         env:
           GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.check.outputs.version }}
+          BRANCH: ${{ steps.tag.outputs.branch }}
         run: |
-          branch="${{ steps.tag.outputs.branch }}"
-          title="MuseScore ${{ steps.check.outputs.version }} is out"
+          branch="$BRANCH"
+          title="MuseScore $VERSION is out"
 
           # Closing a proposal without merging it is an answer, and the bot
           # should not argue with it the next day. Merged means the bump has
@@ -149,10 +176,12 @@ jobs:
 
       - name: Bump the mechanical files
         if: steps.gate.outputs.act == 'yes' && steps.gate.outputs.branch_exists == 'no'
+        env:
+          VERSION: ${{ steps.check.outputs.version }}
+          SHA: ${{ steps.tag.outputs.sha }}
         run: |
-          git update-index --add --cacheinfo 160000,${{ steps.tag.outputs.sha }},musescore
-          python3 tools/bump-musescore.py \
-            "${{ steps.check.outputs.version }}" "${{ steps.tag.outputs.sha }}"
+          git update-index --add --cacheinfo "160000,$SHA,musescore"
+          python3 tools/bump-musescore.py "$VERSION" "$SHA"
           git add tools/deps.json docs/dependencies.md README.md \
                   web-public/package.json web-public/package-lock.json
           # The fence. On a violation nothing is pushed and no pull request
@@ -164,14 +193,17 @@ jobs:
 
       - name: Push the branch
         if: steps.gate.outputs.act == 'yes' && steps.gate.outputs.branch_exists == 'no'
+        env:
+          VERSION: ${{ steps.check.outputs.version }}
+          BRANCH: ${{ steps.tag.outputs.branch }}
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -b "${{ steps.tag.outputs.branch }}"
+          git checkout -b "$BRANCH"
           # Must not start with "release v": that prefix is what build.yml's
           # publish job watches for on main.
-          git commit -m "musescore: bump the submodule to ${{ steps.check.outputs.version }} (mechanical)"
-          git push origin "${{ steps.tag.outputs.branch }}"
+          git commit -m "musescore: bump the submodule to $VERSION (mechanical)"
+          git push origin "$BRANCH"
 
       - name: Open the draft
         id: draft
@@ -241,12 +273,13 @@ jobs:
         if: steps.draft.outputs.created == 'yes'
         env:
           GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ steps.tag.outputs.branch }}
         run: |
           # workflow_dispatch is the one event GITHUB_TOKEN may still trigger.
           # Needs `workflow_dispatch:` on build.yml, and that entry has to be
           # on the default branch before this line can work at all.
-          gh workflow run build.yml --ref "${{ steps.tag.outputs.branch }}" || \
-            echo "could not dispatch build.yml on ${{ steps.tag.outputs.branch }} - start it by hand" >&2
+          gh workflow run build.yml --ref "$BRANCH" || \
+            echo "could not dispatch build.yml on $BRANCH - start it by hand" >&2
 
       # Last, because the gate above keys on it: an issue means the run got
       # all the way here.

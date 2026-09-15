@@ -36,6 +36,7 @@ when upstream drifts.
     ├── web/                  # wasm entry (C ABI + WasmRes wire format)
     ├── web-public/           # JS wrapper (webmscore-compatible subset, no audio)
     ├── testdata/             # corpus baseline and waivers, two test scores
+    ├── tests/                # unit tests for the pure functions
     └── tools/                # mscz2media CLI, build scripts, corpus gates
 
 * **Toolchain:** Emscripten only (wasm) / plain g++ (native CLI). FreeType,
@@ -52,6 +53,13 @@ when upstream drifts.
   methods throw a clear "not supported in this build" error.
 * **SVG text:** glyph outlines as `<path>` — self-contained SVG, no font
   delivery to browsers.
+* **Reads are confined** to the resource directory and the file the caller
+  named. `chordDescriptionFile` is a *style value*, so it arrives from the
+  `.mscx`, and upstream pastes a relative one behind `:/engraving/styles/`
+  without normalizing it — which let a score point the engine at any path on
+  the host. The wasm build was always fenced in by MEMFS; the native CLI and
+  the sidecar are now fenced by `EngineFileSystem` itself
+  (`src/platform/enginefilesystem.h`).
 * **Embedded pictures:** carried through undecoded — the header gives the pixel
   size the layout needs, the original bytes go into an `<image>` data URI. PNG,
   JPEG, GIF and BMP; the two formats MuseScore accepts and a browser cannot
@@ -181,9 +189,20 @@ nothing textual beyond the viewBox is compared; a light blur forgives the
 sub-pixel kerning shifts of HarfBuzz vs Qt, and structural defects land far
 above the thresholds.
 
-CI runs the native gate, the wasm gate, the shadow drift guard and the
-dependency manifest check on every build; a push to `main` whose commit message
-starts with `release v` attaches that run's tarball to a GitHub Release.
+`tests/main.cpp` covers what the corpus structurally cannot. The gates above
+compare whole conversions of the scores that exist, so they only ever exercise
+what those scores contain — and none of the 570 carries a picture, which left
+`probeImage()`, the one loop here that walks bytes an attacker could shape,
+checked by a single `grep` for a data URI. The unit tests take the pure
+functions directly: the header probe (every truncation of every format, the
+JPEG segment walk, the markers inside the SOF range that are not frame
+headers), MD4 against the RFC 1320 vectors, and the three SVG primitives —
+number formatting, XML escaping, base64. No test framework; `build/sve_tests`
+prints what failed and returns non-zero, and `ctest` runs it as `unit`.
+
+CI runs the unit tests, the native gate, the wasm gate, the shadow drift guard
+and the dependency manifest check on every build; a push to `main` whose commit
+message starts with `release v` attaches that run's tarball to a GitHub Release.
 
 ## Dependencies
 

@@ -65,10 +65,38 @@ TRACKED = "@tree"
 
 UA = "scoreview-engine-check-deps"
 TIMEOUT = 30
+# Nothing this script asks for is large: the biggest answer is a 100-entry tag
+# list. An unbounded read() is one broken or hostile upstream away from filling
+# the runner's memory, and there is no version string worth that.
+MAX_RESPONSE = 8 * 1024 * 1024
 
 
 # --------------------------------------------------------------------------
 # helpers
+
+
+class _StripAuthOnCrossHostRedirect(urllib.request.HTTPRedirectHandler):
+    """Drop Authorization when a redirect leaves the host it was meant for.
+
+    urllib carries every header it was given straight to the redirect target.
+    The GitHub API does not redirect across hosts today, and "today" is the
+    entire strength of that guarantee - a token is not something to hand to
+    whoever answers next.
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        new = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if new is None:
+            return None
+        same_host = urllib.parse.urlparse(req.full_url).netloc == urllib.parse.urlparse(newurl).netloc
+        if not same_host:
+            for store in (new.headers, new.unredirected_hdrs):
+                for name in [k for k in store if k.lower() == "authorization"]:
+                    del store[name]
+        return new
+
+
+_OPENER = urllib.request.build_opener(_StripAuthOnCrossHostRedirect())
 
 
 def fetch(url, data=None, headers=None, timeout=TIMEOUT):
@@ -79,8 +107,13 @@ def fetch(url, data=None, headers=None, timeout=TIMEOUT):
     if body:
         hdrs["Content-Type"] = "application/json"
     req = urllib.request.Request(url, data=body, headers=hdrs)
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        return resp.read().decode("utf-8", "replace")
+    with _OPENER.open(req, timeout=timeout) as resp:
+        # One byte over the limit is enough to know it was exceeded, and
+        # cheaper than trusting a Content-Length nobody has to send.
+        raw = resp.read(MAX_RESPONSE + 1)
+    if len(raw) > MAX_RESPONSE:
+        raise ValueError(f"{url}: response larger than {MAX_RESPONSE} bytes")
+    return raw.decode("utf-8", "replace")
 
 
 def fetch_json(url, data=None, headers=None, timeout=TIMEOUT):

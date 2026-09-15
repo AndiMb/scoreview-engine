@@ -41,8 +41,32 @@ the same way the shadow copies are.
 
 `upstream.lock` pins the git blob id of every upstream file this repository
 carries a copy of — shadow copies, prelude targets, and the data files under
-`resources/`. `tools/check-shadow-drift.sh` verifies the pins against the
-submodule and fails when upstream drifts — CI runs it on every build. When it
-fires: re-derive the shadow copy, re-check the prelude, or re-copy the data
-file against the new upstream, then update the lock with the new blob id
-(`git -C musescore rev-parse HEAD:<path>`).
+`resources/`. `tools/check-shadow-drift.sh` verifies it, and CI runs that on
+every build.
+
+A line is
+
+    <blob id>  <path in the submodule>  [<verbatim copy in this tree>]
+
+**Two fields** pin the upstream side only. That is all a shadow copy or a
+prelude target can be checked for: one carries a marked diff, the other has no
+copy in this tree at all, so neither can be compared byte for byte against
+upstream.
+
+**Three fields** say the copy is upstream's bytes with CRLF normalized to LF
+and nothing else — the data files under `resources/`. Those are compared in
+both directions: the pin against the submodule, *and* the file in this tree
+against the pinned blob. The second half matters because nothing else in the
+build ever looks at those files. No compiler reads them, so an edited or
+badly merged `resources/engraving/...` would have passed the drift guard, the
+dependency check and the corpus gate alike, and only shown up as a score from
+2018 being engraved by today's rules.
+
+When the guard fires it says which half:
+
+* `SHADOW DRIFT` — upstream moved. Re-derive the shadow copy, re-check the
+  prelude, or re-copy the data file against the new upstream, then update the
+  lock with the new blob id (`git -C musescore rev-parse HEAD:<path>`).
+* `COPY DRIFT` — upstream did not move, so this copy was edited. Re-copy it,
+  or, if the difference is deliberate, make it a real shadow copy: move it
+  under `src/shadow/`, mark the diff, and drop the third field.

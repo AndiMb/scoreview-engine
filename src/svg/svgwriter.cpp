@@ -1,6 +1,8 @@
 #include "svgwriter.h"
 
 #include <algorithm>
+#include <memory>
+#include <utility>
 
 #include "painter.h"
 
@@ -133,24 +135,27 @@ ByteArray SvgWriter::write(Score* score, size_t pageNumber, const Options& opt)
                 continue;
             }
 
-            auto paintConcatenated = [&](StaffLines* sl, const Shape& shape, const Shape& mask) {
+            // The clone is owned, not borrowed: paintItem() can throw, and the
+            // bare delete that used to sit at the end of this lambda was then
+            // never reached. In the wasm build guarded() turns that throw into
+            // an ordinary error return, so the leak did not even announce
+            // itself - the module just kept the memory until the page went away.
+            auto paintConcatenated = [&](std::unique_ptr<StaffLines> sl, const Shape& shape, const Shape& mask) {
                 sl->mutldata()->setShape(shape);
                 sl->mutldata()->setMask(mask);
-                provider->beginObject(classTag(sl, segmentIds));
-                renderer.paintItem(painter, sl, eopt);
+                provider->beginObject(classTag(sl.get(), segmentIds));
+                renderer.paintItem(painter, sl.get(), eopt);
                 provider->endObject();
-                delete sl;
             };
 
-            StaffLines* concatenatedSL = nullptr;
+            std::unique_ptr<StaffLines> concatenatedSL;
             Shape concatenatedShape;
             Shape concatenatedMask;
             StaffType* prevStaffType = nullptr;
             for (MeasureBase* measure = firstMeasure; measure; measure = system->nextMeasure(measure)) {
                 if (!measure->isMeasure()) {
-                    if (concatenatedSL != nullptr) {
-                        paintConcatenated(concatenatedSL, concatenatedShape, concatenatedMask);
-                        concatenatedSL = nullptr;
+                    if (concatenatedSL) {
+                        paintConcatenated(std::move(concatenatedSL), concatenatedShape, concatenatedMask);
                         prevStaffType = nullptr;
                     }
                     continue;
@@ -161,16 +166,15 @@ ByteArray SvgWriter::write(Score* score, size_t pageNumber, const Options& opt)
 
                 if ((!m->visible(staffIndex) && !m->isCutawayClef(staffIndex)) || !sl->visible()
                     || (score->staff(staffIndex)->staffType(m->tick()) != prevStaffType)) {
-                    if (concatenatedSL != nullptr) {
-                        paintConcatenated(concatenatedSL, concatenatedShape, concatenatedMask);
-                        concatenatedSL = nullptr;
+                    if (concatenatedSL) {
+                        paintConcatenated(std::move(concatenatedSL), concatenatedShape, concatenatedMask);
                         prevStaffType = nullptr;
                     }
                 }
 
-                if (concatenatedSL == nullptr) {
+                if (!concatenatedSL) {
                     if ((m->visible(staffIndex) || m->isCutawayClef(staffIndex)) && sl->visible()) {
-                        concatenatedSL = toStaffLines(sl->clone());
+                        concatenatedSL.reset(toStaffLines(sl->clone()));
                         concatenatedShape = sl->ldata()->shape();
                         concatenatedMask = sl->ldata()->mask();
                         prevStaffType = score->staff(staffIndex)->staffType(m->tick());
@@ -189,9 +193,8 @@ ByteArray SvgWriter::write(Score* score, size_t pageNumber, const Options& opt)
                 }
             }
 
-            if (concatenatedSL != nullptr) {
-                paintConcatenated(concatenatedSL, concatenatedShape, concatenatedMask);
-                concatenatedSL = nullptr;
+            if (concatenatedSL) {
+                paintConcatenated(std::move(concatenatedSL), concatenatedShape, concatenatedMask);
                 prevStaffType = nullptr;
             }
         }
@@ -210,8 +213,15 @@ ByteArray SvgWriter::write(Score* score, size_t pageNumber, const Options& opt)
         }
 
         // Match BspTree::items, which checks for bbox intersection
-        // and empty RectF intersects with nothing
-        if (element->ldata()->bbox().isEmpty()) {
+        // and empty RectF intersects with nothing.
+        //
+        // isSetBbox() first, as positionswriter.cpp does: an unset bbox reads
+        // back as an empty one today, so this decides nothing on its own, but
+        // only because upstream currently short-circuits the LD_ACCESS::CHECK
+        // in LayoutData::bbox() ("Temporary disabled CHECK - a lot of
+        // messages"). When that comes back, asking first is the difference
+        // between a clean skip and an error logged per element.
+        if (!element->ldata() || !element->ldata()->isSetBbox() || element->ldata()->bbox().isEmpty()) {
             continue;
         }
 
