@@ -27,12 +27,24 @@ using namespace mu::engraving;
 
 static const char* MODULE_NAME = "scoreview-engine";
 
+// The IOC owns it; this is the same pointer, kept so allowRead() can reach the
+// one method that is ours rather than IFileSystem's.
+static sve::EngineFileSystem* s_fileSystem = nullptr;
+
+void sve::allowRead(const io::path_t& path)
+{
+    if (s_fileSystem) {
+        s_fileSystem->allowRead(path);
+    }
+}
+
 bool sve::initEngraving(const std::string& resourceRoot)
 {
     auto ioc = modularity::globalIoc();
     modularity::ContextPtr ctx;
 
-    ioc->registerExport<io::IFileSystem>(MODULE_NAME, new EngineFileSystem(resourceRoot));
+    s_fileSystem = new EngineFileSystem(resourceRoot);
+    ioc->registerExport<io::IFileSystem>(MODULE_NAME, s_fileSystem);
     ioc->registerExport<ICryptographicHash>(MODULE_NAME, new CryptographicHash());
 
     FontsDatabase* fdb = new FontsDatabase();

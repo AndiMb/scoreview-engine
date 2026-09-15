@@ -13,6 +13,8 @@
 #include "engraving/engravingerrors.h"
 #include "engraving/infrastructure/localfileinfoprovider.h"
 
+#include "config/engravinginit.h"
+
 #include "log.h"
 
 using namespace muse;
@@ -21,6 +23,11 @@ using namespace mu::engraving;
 namespace sve {
 MasterScore* loadScore(const io::path_t& path, bool doLayout)
 {
+    // The one read the caller actually asked for. Everything else the engine
+    // opens is a resource, and a path a *score* names gets no say — see
+    // sve::allowRead and enginefilesystem.h.
+    allowRead(path);
+
     MasterScore* score = compat::ScoreAccess::createMasterScoreWithBaseStyle(nullptr);
     score->setFileInfoProvider(std::make_shared<LocalFileInfoProvider>(path));
 

@@ -149,6 +149,10 @@ bool addFont(const char* fontPath)
         return false;
     }
 
+    // Both the face below and the fonts database later read this file, and
+    // the manifest next to it.
+    sve::allowRead(muse::io::path_t(std::string(fontPath)));
+
     FT_Face ftface = nullptr;
     if (FT_New_Face(ftlib, fontPath, 0, &ftface) != 0) {
         LOGE() << "addFont: FreeType cannot read " << fontPath;
@@ -191,6 +195,7 @@ bool addFont(const char* fontPath)
         }
     }
 
+    sve::allowRead(muse::io::path_t(dir));
     muse::modularity::globalIoc()
         ->resolve<muse::draw::IFontsDatabase>("scoreview-engine")
         ->addAdditionalFonts(muse::io::path_t(dir));

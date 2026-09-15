@@ -52,6 +52,13 @@ when upstream drifts.
   methods throw a clear "not supported in this build" error.
 * **SVG text:** glyph outlines as `<path>` — self-contained SVG, no font
   delivery to browsers.
+* **Reads are confined** to the resource directory and the file the caller
+  named. `chordDescriptionFile` is a *style value*, so it arrives from the
+  `.mscx`, and upstream pastes a relative one behind `:/engraving/styles/`
+  without normalizing it — which let a score point the engine at any path on
+  the host. The wasm build was always fenced in by MEMFS; the native CLI and
+  the sidecar are now fenced by `EngineFileSystem` itself
+  (`src/platform/enginefilesystem.h`).
 * **Embedded pictures:** carried through undecoded — the header gives the pixel
   size the layout needs, the original bytes go into an `<image>` data URI. PNG,
   JPEG, GIF and BMP; the two formats MuseScore accepts and a browser cannot
