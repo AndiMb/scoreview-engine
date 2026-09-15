@@ -29,7 +29,7 @@ jobs:
     steps:
       # No submodules on purpose: check-deps.py skips the rules that would
       # need them rather than pulling 800 MB to read two version strings.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       - name: Check dependencies
         id: check
