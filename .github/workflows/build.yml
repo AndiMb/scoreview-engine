@@ -45,6 +45,14 @@ jobs:
           cmake -S . -B build -GNinja -DCMAKE_BUILD_TYPE=Debug
           ninja -C build
 
+      # Half a second, and the only coverage some of this code has. The corpus
+      # gate is an end-to-end comparison over whatever the 570 vtest scores
+      # happen to contain, and none of them carries a picture -- so the header
+      # probe, the one loop here that walks attacker-shaped bytes, is checked
+      # nowhere else. Cheap and specific, so it runs before the slow gates.
+      - name: Unit tests
+        run: build/sve_tests
+
       - name: Convert test score
         run: |
           build/mscz2media testdata/repeat-test.mscz --resources resources --out build/out --drawdata --midi --spos --mpos --meta --svg

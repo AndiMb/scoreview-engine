@@ -180,6 +180,39 @@ target_link_libraries(sve_engine PUBLIC
 if(NOT EMSCRIPTEN)
     add_executable(mscz2media tools/mscz2media/main.cpp)
     target_link_libraries(mscz2media sve_engine)
+
+    # Unit tests for the pure functions — the header probe, MD4, and the three
+    # SVG serialization primitives. Deliberately NOT linked against sve_engine:
+    # these have no engine dependency beyond ByteArray, and a test binary that
+    # relinks 290 MB of engraving for every edit is one nobody runs. Two source
+    # files and muse::global build in seconds.
+    enable_testing()
+    add_executable(sve_tests
+        tests/main.cpp
+        src/image/imageformat.cpp
+        src/platform/cryptographichash.cpp
+    )
+    target_include_directories(sve_tests PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}/src
+        ${MU_ROOT}/src/framework
+        ${MU_ROOT}/src/framework/global
+        ${CMAKE_BINARY_DIR}                  # muse_framework_config.h
+    )
+    target_link_libraries(sve_tests muse::global)
+    add_test(NAME unit COMMAND sve_tests)
+
+    # -DSVE_SANITIZE=ON instruments the test binary and the two sources under
+    # it. That is the half of the truncation loop a plain build cannot check:
+    # walking every prefix of every header proves the probe agrees with itself,
+    # but only ASan can say it never read a byte past the end. muse::global
+    # stays uninstrumented, which is fine - ASan reports what the instrumented
+    # code touches, and the code under test is exactly that.
+    option(SVE_SANITIZE "Build sve_tests with AddressSanitizer and UBSan" OFF)
+    if(SVE_SANITIZE)
+        target_compile_options(sve_tests PRIVATE
+            -fsanitize=address,undefined -fno-omit-frame-pointer -g)
+        target_link_options(sve_tests PRIVATE -fsanitize=address,undefined)
+    endif()
 endif()
 
 if(EMSCRIPTEN)
