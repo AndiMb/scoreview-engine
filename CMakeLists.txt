@@ -245,6 +245,15 @@ if(EMSCRIPTEN)
     set(WASM_LINK_FLAGS "${WASM_LINK_FLAGS} -s ALLOW_TABLE_GROWTH=1")
     set(WASM_LINK_FLAGS "${WASM_LINK_FLAGS} -s ALLOW_MEMORY_GROWTH=1")
     set(WASM_LINK_FLAGS "${WASM_LINK_FLAGS} -s INITIAL_MEMORY=32MB")
+    # The ceiling, spelled out rather than left to the default. A growing heap
+    # never shrinks back, so in a long-lived process every score raises the
+    # floor the next one starts from, and one pathological score would hold
+    # that memory for the life of the module. Hitting this limit surfaces as a
+    # failed allocation, which guarded() in web/main.cpp turns into an ordinary
+    # error for the caller -- an out-of-memory abort would take the whole
+    # module down instead. Callers converting untrusted scores back to back
+    # should still give each one its own worker; see web-public/src/worker.js.
+    set(WASM_LINK_FLAGS "${WASM_LINK_FLAGS} -s MAXIMUM_MEMORY=2GB")
     set(WASM_LINK_FLAGS "${WASM_LINK_FLAGS} -s EXPORTED_FUNCTIONS='[\"_malloc\", \"_free\"]'")
     set(WASM_LINK_FLAGS "${WASM_LINK_FLAGS} -s EXPORTED_RUNTIME_METHODS='[\"ccall\", \"cwrap\", \"stringToUTF8\", \"UTF8ToString\", \"getValue\", \"setValue\", \"HEAPU8\", \"FS_createDataFile\"]'")
     # zlib for the mscz container (muse_global expects it from the linker

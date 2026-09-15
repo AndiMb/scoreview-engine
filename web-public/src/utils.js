@@ -65,11 +65,13 @@ export const shimDom = () => {
         addEventListener() { },
         location: new URL("file:///"),
         encodeURIComponent,
-        // Qt's WebAssembly event dispatcher schedules its timers through
-        // window, and takes the handle back as a number. Node returns a Timeout
-        // object, whose primitive value is the id clearTimeout also accepts.
-        // unref keeps a pending Qt timer - the font cache arms one on the first
-        // score - from holding the process open after the caller is done.
+        // Emscripten's event handling schedules timers through window and
+        // takes the handle back as a number. Node returns a Timeout object,
+        // whose primitive value is the id clearTimeout also accepts. unref
+        // keeps a pending timer from holding the process open after the caller
+        // is done. (This shim outlived the Qt build it was written for: the Qt
+        // event dispatcher is gone, the window/navigator globals emscripten's
+        // own glue reads are not.)
         setTimeout(handler, timeout) {
             const t = globalthis.setTimeout(handler, timeout)
             t.unref?.()
