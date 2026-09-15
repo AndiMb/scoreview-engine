@@ -1,18 +1,27 @@
-90a9561efee05b655eeae83139ea697f6c7e62f0 src/engraving/internal/engravingfontsprovider.cpp
-7d9bf3d93f3ec5bde61b38319eba3396387e1e06 src/framework/draw/internal/fontsengine.cpp
-094156cff9d59b213beaac18b2d17407c6ee5922 src/importexport/midi/internal/midiexport/exportmidi.h
-732044cdb82f44e78a45710af17fc8c64e95f91b src/importexport/midi/internal/midiexport/exportmidi.cpp
-e5423e4b7ab02cb0e0f27b99f2ff2b123836e438 src/importexport/midi/internal/midishared/midifile.h
-38a609d1a38746899dd975900c15657f81f1c02b src/importexport/midi/internal/midishared/midifile.cpp
-e2cfe85c044ae6ef1ed0d068dd5ec905b36fbdb7 src/importexport/midi/internal/midishared/midievent.h
-adb88433950c794afc7432400c115dc64e458b8e src/framework/draw/internal/fontsengine.h
-c90ab68726009aa0640958df654bae2712cded18 src/framework/draw/internal/fontprovider.cpp
-56f443751b73ff3622b88a6e68a36ca5f7564e91 src/engraving/data/styles/legacy-style-defaults-v1.mss
-d0feee4eb448b2a4e875b75d49f93072f52fc4a3 src/engraving/data/styles/legacy-style-defaults-v2.mss
-0cce56826f45919b522163a019d12bcd774f6519 src/engraving/data/styles/legacy-style-defaults-v3.mss
-1fdff5e65f40d1262d59037eb3875fbb2db2d28e src/engraving/data/styles/legacy-style-defaults-v302.mss
-32ad585720aac819e7dda28d180262a2c35e0c69 src/engraving/data/styles/legacy-style-defaults-v450.mss
-9ac11c773011534eaf05abb0102177b50d5f2490 src/engraving/data/chords/chords_legacy.xml
-7e367b0d3aa0fba5565f0f8c6cf1a29757c36965 src/engraving/data/chords/stdchords.xml
-922ac0064838c6d580c61e44adb4a19b81715aab src/engraving/data/chords/chords_std.xml
-9f75a790dd59286d0d6a9b44f46b4312db723fd9 share/instruments/instruments.xml
+# <blob id>  <path in the submodule>  [<verbatim copy in this tree>]
+#
+# Two fields: the upstream side is pinned, the local side carries a marked diff
+# (shadow copy) or does not exist (prelude target, unmodified include).
+# Three fields: the copy is upstream's bytes with CRLF normalized to LF and
+# nothing else, and tools/check-shadow-drift.sh compares it both ways.
+# Procedure when either side fires: src/shadow/README.md, section "Drift guard".
+
+90a9561efee05b655eeae83139ea697f6c7e62f0  src/engraving/internal/engravingfontsprovider.cpp
+7d9bf3d93f3ec5bde61b38319eba3396387e1e06  src/framework/draw/internal/fontsengine.cpp
+094156cff9d59b213beaac18b2d17407c6ee5922  src/importexport/midi/internal/midiexport/exportmidi.h
+732044cdb82f44e78a45710af17fc8c64e95f91b  src/importexport/midi/internal/midiexport/exportmidi.cpp
+e5423e4b7ab02cb0e0f27b99f2ff2b123836e438  src/importexport/midi/internal/midishared/midifile.h
+38a609d1a38746899dd975900c15657f81f1c02b  src/importexport/midi/internal/midishared/midifile.cpp
+e2cfe85c044ae6ef1ed0d068dd5ec905b36fbdb7  src/importexport/midi/internal/midishared/midievent.h
+adb88433950c794afc7432400c115dc64e458b8e  src/framework/draw/internal/fontsengine.h
+c90ab68726009aa0640958df654bae2712cded18  src/framework/draw/internal/fontprovider.cpp
+
+56f443751b73ff3622b88a6e68a36ca5f7564e91  src/engraving/data/styles/legacy-style-defaults-v1.mss    resources/engraving/styles/legacy-style-defaults-v1.mss
+d0feee4eb448b2a4e875b75d49f93072f52fc4a3  src/engraving/data/styles/legacy-style-defaults-v2.mss    resources/engraving/styles/legacy-style-defaults-v2.mss
+0cce56826f45919b522163a019d12bcd774f6519  src/engraving/data/styles/legacy-style-defaults-v3.mss    resources/engraving/styles/legacy-style-defaults-v3.mss
+1fdff5e65f40d1262d59037eb3875fbb2db2d28e  src/engraving/data/styles/legacy-style-defaults-v302.mss  resources/engraving/styles/legacy-style-defaults-v302.mss
+32ad585720aac819e7dda28d180262a2c35e0c69  src/engraving/data/styles/legacy-style-defaults-v450.mss  resources/engraving/styles/legacy-style-defaults-v450.mss
+9ac11c773011534eaf05abb0102177b50d5f2490  src/engraving/data/chords/chords_legacy.xml               resources/engraving/styles/chords_legacy.xml
+7e367b0d3aa0fba5565f0f8c6cf1a29757c36965  src/engraving/data/chords/stdchords.xml                   resources/engraving/styles/stdchords.xml
+922ac0064838c6d580c61e44adb4a19b81715aab  src/engraving/data/chords/chords_std.xml                  resources/engraving/styles/chords_std.xml
+9f75a790dd59286d0d6a9b44f46b4312db723fd9  share/instruments/instruments.xml                         resources/engraving/instruments/instruments.xml
