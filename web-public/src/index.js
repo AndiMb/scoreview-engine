@@ -30,10 +30,14 @@ export class NotSupportedError extends Error {
 let _hasLogLevelSet = false
 
 /**
- * Fonts already written into the virtual file system, by content key.
+ * What `addFont` answered for each font already written into the virtual file
+ * system, by content key. The answer is kept, failure included: the file
+ * cannot be written a second time, and a font FreeType rejected once it will
+ * reject again.
  * @see WebMscore.addFont
+ * @type {Map<string, boolean>}
  */
-const _registeredFonts = new Set()
+const _registeredFonts = new Map()
 
 /**
  * The name each font buffer already got, so the same array handed to a second
@@ -212,21 +216,37 @@ class WebMscore {
             // copy of the same font into the virtual file system on every
             // single call, for the life of the module.
             const name = fontName(font)
-            if (_registeredFonts.has(name)) {
-                return true
+            const known = _registeredFonts.get(name)
+            if (known !== undefined) {
+                return known
             }
             // save the font data to the virtual file system. /tmp, not
             // /fonts as in webmscore: this build preloads its resources
             // under /resources and has no /fonts directory.
             Module['FS_createDataFile']('/tmp/', name, font, true, true)
-            _registeredFonts.add(name)
-            font = '/tmp/' + name
+            const success = WebMscore._addFontFile('/tmp/' + name)
+            // Recorded only once the engine has answered: this used to mark
+            // the font registered before asking, so a font the engine refused
+            // came back as a success from every later call.
+            _registeredFonts.set(name, success)
+            return success
         }
 
-        const fontpathptr = getStrPtr(font)
-        const success = Module.ccall('addFont', 'number', ['number'], [fontpathptr])
-        freePtr(fontpathptr)
-        return !!success
+        return WebMscore._addFontFile(font)
+    }
+
+    /**
+     * @private
+     * @param {string} path a font file in the virtual file system
+     * @returns {boolean} success
+     */
+    static _addFontFile(path) {
+        const fontpathptr = getStrPtr(path)
+        try {
+            return !!Module.ccall('addFont', 'number', ['number'], [fontpathptr])
+        } finally {
+            freePtr(fontpathptr)
+        }
     }
 
     /**

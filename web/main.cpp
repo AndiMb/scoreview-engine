@@ -149,8 +149,7 @@ bool addFont(const char* fontPath)
         return false;
     }
 
-    // Both the face below and the fonts database later read this file, and
-    // the manifest next to it.
+    // Both the face below and the fonts database later read this file.
     sve::allowRead(muse::io::path_t(std::string(fontPath)));
 
     FT_Face ftface = nullptr;
@@ -172,21 +171,36 @@ bool addFont(const char* fontPath)
     std::string dir = (slash == std::string::npos) ? std::string(".") : path.substr(0, slash);
     std::string file = (slash == std::string::npos) ? path : path.substr(slash + 1);
 
-    // Minimal JSON escaping — family names carry letters/digits/spaces, but
-    // a quote or backslash must not break the manifest.
+    // JSON string escaping. The family name is whatever the font file says,
+    // and the file is the caller's: a quote or backslash would end the
+    // string, and a control character is one the manifest parser (picojson)
+    // refuses outright. addAdditionalFonts() only logs a manifest it cannot
+    // parse, so this function would have answered true for a font that was
+    // never registered.
     auto escape = [](const std::string& s) {
         std::string out;
         for (char c : s) {
+            const unsigned char u = static_cast<unsigned char>(c);
             if (c == '"' || c == '\\') {
                 out += '\\';
+                out += c;
+            } else if (u < 0x20) {
+                char buf[8];
+                std::snprintf(buf, sizeof(buf), "\\u%04x", u);
+                out += buf;
+            } else {
+                out += c;
             }
-            out += c;
         }
         return out;
     };
 
+    // The manifest and the font are all the fonts database reads, so they are
+    // all that is opened - not the directory they sit in. From the JS wrapper
+    // that directory is /tmp, where every score is written on its way in.
+    const std::string manifestPath = dir + "/fontslist.json";
     {
-        std::ofstream manifest(dir + "/fontslist.json", std::ios::trunc);
+        std::ofstream manifest(manifestPath, std::ios::trunc);
         manifest << "[{\"file\":\"" << escape(file) << "\",\"family\":\"" << escape(family)
                  << "\",\"bold\":" << (bold ? "true" : "false")
                  << ",\"italic\":" << (italic ? "true" : "false") << "}]";
@@ -195,7 +209,7 @@ bool addFont(const char* fontPath)
         }
     }
 
-    sve::allowRead(muse::io::path_t(dir));
+    sve::allowRead(muse::io::path_t(manifestPath));
     muse::modularity::globalIoc()
         ->resolve<muse::draw::IFontsDatabase>("scoreview-engine")
         ->addAdditionalFonts(muse::io::path_t(dir));
