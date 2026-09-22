@@ -133,7 +133,12 @@ jobs:
           # of musescore-release.yml.
           WORKSPACE: ${{ github.workspace }}
         run: |
-          docker run --rm -v "$WORKSPACE:/src" emscripten/emsdk:6.0.9 bash -c '
+          # Tag for the reader and for check-deps.py, digest for the pull: a
+          # tag on Docker Hub can be re-pushed, and this image is the one
+          # dependency of the build that was pinned by name rather than by
+          # content. It is the multi-arch index digest, as `docker buildx
+          # imagetools inspect emscripten/emsdk:<version>` prints it.
+          docker run --rm -v "$WORKSPACE:/src" emscripten/emsdk:6.0.9@sha256:96617f27fe16421588241def73908fd348a7f9d260440ed0d00b36dcf7a063cc bash -c '
             set -e
             emcmake cmake -S /src -B /src/build-wasm -DCMAKE_BUILD_TYPE=Release
             cmake --build /src/build-wasm --target scoreview -- -j "$(nproc)"
@@ -189,9 +194,25 @@ jobs:
       - name: Version from commit message
         env:
           COMMIT_MSG: ${{ github.event.head_commit.message }}
+        # The tag becomes part of the URL ScoreView pins, and ScoreView reads
+        # the MuseScore version back out of the asset's name
+        # (scoreview-engine-<musescore version>.tgz; bump-musescore.py keeps
+        # the package version on it). So the tag has one shape, and its
+        # MuseScore part has to name the tarball this run built - refused
+        # otherwise, before anything is published.
         run: |
-          VERSION=$(echo "$COMMIT_MSG" | head -1 | cut -d ' ' -f 2)
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          VERSION=$(printf '%s\n' "$COMMIT_MSG" | head -1 | cut -d ' ' -f 2)
+          if ! printf '%s' "$VERSION" | grep -Eqx 'v[0-9]+\.[0-9]+\.[0-9]+-engine\.[0-9]+'; then
+            echo "::error::release tag '$VERSION' is not v<X.Y.Z>-engine.<N>"
+            exit 1
+          fi
+          MUSESCORE=${VERSION#v}
+          MUSESCORE=${MUSESCORE%-engine.*}
+          if [ ! -f "scoreview-engine-$MUSESCORE.tgz" ]; then
+            echo "::error::tag $VERSION, but the tarball is $(ls scoreview-engine-*.tgz)"
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "$VERSION"
 
       - name: Publish to GitHub Releases
