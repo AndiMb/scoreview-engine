@@ -89,13 +89,15 @@ jobs:
       # The corpus gate: fingerprints of MIDI, spos/mpos and metadata for all
       # vtest scores must match the released Qt webmscore (baseline in
       # testdata/). "tracks" is allowed to differ — this build has no audio,
-      # so the metadata track list is always empty.
+      # so the metadata track list is always empty. "title" is absent from
+      # the baseline, which stripped it as volatile; native and wasm compare
+      # it exactly in the job below.
       - name: Corpus
         run: |
           python3 tools/corpus-native.py --bin build/mscz2media --resources resources \
             --scores musescore/vtest/scores --out build/corpus-native.json --with-svg
           python3 tools/corpus-compare.py testdata/corpus-baseline.json build/corpus-native.json \
-            --allow-meta tracks --waivers testdata/corpus-waivers.json
+            --allow-meta tracks --allow-meta title --waivers testdata/corpus-waivers.json
 
       - name: Upload native corpus report
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1

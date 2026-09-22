@@ -17,9 +17,10 @@ import subprocess
 import sys
 import tempfile
 
-# Fields that move on their own; corpus.cjs keeps the list next to the reason
-# (title falls back to the file name for untitled scores).
-VOLATILE = {"programVersion", "programRevision", "mscoreVersion", "encoding-date", "title"}
+# Fields that move on their own. "title" used to be one - it fell back to the
+# file name, which the wasm build makes up per load - and is compared now;
+# the frozen baseline never carried it, hence --allow-meta title there.
+VOLATILE = {"programVersion", "programRevision", "mscoreVersion", "encoding-date"}
 
 
 def stable_meta(meta):

@@ -124,10 +124,11 @@ static String scoreTitle(const Score* score)
         title = recognizeTitle(score);
     }
 
-    if (title.isEmpty()) {
-        title = score->name();
-    }
-
+    // No fallback to score->name(), where upstream NotationMeta has one: the
+    // name is the file's, and in the wasm build that file is /tmp/score-<n>,
+    // numbered by how many scores the module has loaded before. An untitled
+    // score answered "score-17", natively the upload's name - neither of them
+    // the score's. Empty, as the SVG writer already has it.
     return title;
 }
 
