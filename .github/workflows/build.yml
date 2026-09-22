@@ -66,6 +66,17 @@ jobs:
           test -s build/out/page-1.drawdata.json
           test -s build/out/page-1.svg
 
+      # The corpus is .mscz only, and a plain .mscx takes a different path
+      # through upstream: Dir mode, which asks about the score's directory
+      # before it reads the file. The read confinement once refused exactly
+      # that, and every gate stayed green.
+      - name: Convert test score as plain mscx
+        run: |
+          mkdir -p build/mscx
+          python3 -c 'import zipfile; zipfile.ZipFile("testdata/repeat-test.mscz").extract("repeat-test.mscx", "build/mscx")'
+          build/mscz2media build/mscx/repeat-test.mscx --resources resources --out build/out-mscx --svg --midi
+          test -s build/out-mscx/page-1.svg
+
       # The corpus carries no score with a picture, so nothing else here would
       # notice if embedded images stopped working - and they used to take the
       # whole load down, not just the picture.
