@@ -52,6 +52,14 @@ const _registeredFonts = new Set()
 const _fontNames = new WeakMap()
 
 /**
+ * Bumped by `destroy(false)`, which releases every score in the engine at
+ * once. Each instance remembers the value it was loaded under; one that no
+ * longer matches is dead, even though only the instance that called
+ * `destroy(false)` ever got its own flag set.
+ */
+let _epoch = 0
+
+/**
  * FNV-1a over the font bytes. Only needs to separate different fonts from one
  * another, never to resist anything.
  * @param {Uint8Array} data
@@ -243,16 +251,21 @@ class WebMscore {
 
         /** @private */
         this.destroyed = false
+
+        /** @private */
+        this.epoch = _epoch
     }
 
     /**
      * @private
      * The engine hands a destroyed score's address straight back to the next
      * `load()`, so the C side's pointer check cannot tell a stale handle from
-     * a live one - it would silently answer with someone else's score.
+     * a live one - it would silently answer with someone else's score. That
+     * holds for scores another instance's `destroy(false)` released too,
+     * hence the epoch.
      */
     _checkAlive() {
-        if (this.destroyed) {
+        if (this.destroyed || this.epoch !== _epoch) {
             throw new Error('This score has been destroyed. Load it again to use it.')
         }
     }
@@ -480,13 +493,18 @@ class WebMscore {
         }
         this.destroyed = true
 
-        Module.ccall('destroy', 'void', ['number'], [this.scoreptr])
+        // A score destroyAll() already released must not be released again:
+        // its address may belong to a newer score by now.
+        if (this.epoch === _epoch) {
+            Module.ccall('destroy', 'void', ['number'], [this.scoreptr])
+        }
 
         // NOTE Do not free(this.scoreptr). It is the address of a C++ object
         // that destroy() has just released, not a buffer allocated here.
 
         if (!soft) {
             Module.ccall('destroyAll', 'void', [], [])
+            _epoch++
         }
     }
 
