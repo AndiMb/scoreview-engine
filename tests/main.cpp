@@ -7,7 +7,8 @@
 // the one loop in this repository that walks attacker-shaped bytes — tested by
 // a single `grep -q` for a data URI. Everything below is what that gate is
 // structurally unable to check: malformed input, formats no corpus score uses,
-// and the exact output of the three serialization primitives.
+// the exact output of the three serialization primitives, and the read
+// confinement, which no corpus score was ever written to probe.
 //
 // No test framework: this build vendors or pins every dependency it has, and
 // a few dozen assertions do not need gtest to be linked, downloaded or
@@ -17,6 +18,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -25,6 +28,7 @@
 
 #include "image/imageformat.h"
 #include "platform/cryptographichash.h"
+#include "platform/enginefilesystem.h"
 #include "svg/svgprimitives.h"
 
 using muse::ByteArray;
@@ -375,6 +379,118 @@ static void testMd4()
 }
 
 // ---------------------------------------------------------------------------
+// enginefilesystem.h — the read confinement
+// ---------------------------------------------------------------------------
+
+//! A throwaway tree on the real file system: the resource root, a file beside
+//! it that no read may reach, and a sibling whose name shares the root's
+//! prefix. Removed again by the destructor.
+struct ScratchTree {
+    std::filesystem::path base;
+    std::filesystem::path resources;
+
+    ScratchTree()
+    {
+        base = std::filesystem::temp_directory_path()
+               / ("sve-tests-" + std::to_string(reinterpret_cast<uintptr_t>(this)));
+        resources = base / "resources";
+        std::filesystem::create_directories(resources / "engraving" / "styles");
+        std::filesystem::create_directories(base / "resources-backup");
+        std::filesystem::create_directories(base / "uploads");
+        write(resources / "engraving" / "styles" / "chords.xml", "chords");
+        write(base / "secret.txt", "secret");
+        write(base / "resources-backup" / "old.xml", "old");
+        write(base / "uploads" / "score.mscz", "score");
+        write(base / "uploads" / "other.mscz", "other");
+    }
+
+    ~ScratchTree()
+    {
+        std::error_code ec;
+        std::filesystem::remove_all(base, ec);
+    }
+
+    static void write(const std::filesystem::path& p, const char* text)
+    {
+        std::ofstream(p, std::ios::binary) << text;
+    }
+
+    std::string at(const std::filesystem::path& rel) const { return (base / rel).generic_string(); }
+};
+
+//! What a read hands back: the file's text, or "<refused>" for any failure.
+static std::string readText(const sve::EngineFileSystem& fs, const std::string& path)
+{
+    ByteArray data;
+    if (!fs.readFile(muse::io::path_t(path), data)) {
+        return "<refused>";
+    }
+    return std::string(reinterpret_cast<const char*>(data.constData()), data.size());
+}
+
+static void testEngineFileSystem()
+{
+    group("EngineFileSystem: reads stay inside the opened roots");
+
+    const ScratchTree t;
+    sve::EngineFileSystem fs(t.resources.generic_string());
+
+    // The qrc remap, which is what the class exists for.
+    CHECK_EQ("qrc path reads", readText(fs, ":/engraving/styles/chords.xml"), std::string("chords"));
+    CHECK_EQ("qrc path with a .. that stays inside",
+             readText(fs, ":/engraving/styles/../styles/chords.xml"), std::string("chords"));
+    CHECK_EQ("the resource file by its real path",
+             readText(fs, t.at("resources/engraving/styles/chords.xml")), std::string("chords"));
+
+    // chordDescriptionFile, as upstream's ChordList::read() builds it from a
+    // relative style value: pasted behind ":/engraving/styles/" as it came.
+    CHECK_EQ("style value climbing out of the qrc tree",
+             readText(fs, ":/engraving/styles/../../../secret.txt"), std::string("<refused>"));
+    CHECK_EQ("qrc root climbing out", readText(fs, ":/../secret.txt"), std::string("<refused>"));
+    // The same style value written as an absolute path never reaches the
+    // remap at all.
+    CHECK_EQ("absolute path outside", readText(fs, t.at("secret.txt")), std::string("<refused>"));
+    // "resources-backup" starts with "resources"; only the separator test
+    // tells them apart.
+    CHECK_EQ("sibling sharing the root's prefix",
+             readText(fs, t.at("resources-backup/old.xml")), std::string("<refused>"));
+    CHECK_EQ("exists() is fenced too", static_cast<bool>(fs.exists(muse::io::path_t(t.at("secret.txt")))), false);
+    CHECK_EQ("fileSize() is fenced too",
+             static_cast<bool>(fs.fileSize(muse::io::path_t(t.at("secret.txt"))).ret), false);
+    CHECK_EQ("empty path", readText(fs, ""), std::string("<refused>"));
+
+    // A directory inside the root: allowed, but not a file. On glibc the
+    // open succeeds and the size query fails; that must be an error, never a
+    // resize() to 2^64-1.
+    CHECK_EQ("a directory is not a file", readText(fs, ":/engraving"), std::string("<refused>"));
+
+    // allowRead() of a file opens that file and nothing beside it.
+    fs.allowRead(muse::io::path_t(t.at("uploads/score.mscz")));
+    CHECK_EQ("the opened score reads", readText(fs, t.at("uploads/score.mscz")), std::string("score"));
+    CHECK_EQ("its neighbour stays shut", readText(fs, t.at("uploads/other.mscz")), std::string("<refused>"));
+    CHECK_EQ("climbing out of an opened file",
+             readText(fs, t.at("uploads/score.mscz/../other.mscz")), std::string("<refused>"));
+    // A .mscx is read in Dir mode, and upstream's DirReader first asks
+    // whether the score's directory exists. That has to answer yes without
+    // opening the directory for reads.
+    CHECK_EQ("exists() of the opened file's directory",
+             static_cast<bool>(fs.exists(muse::io::path_t(t.at("uploads")))), true);
+    CHECK_EQ("exists() of a neighbour stays shut",
+             static_cast<bool>(fs.exists(muse::io::path_t(t.at("uploads/other.mscz")))), false);
+    CHECK_EQ("the directory itself does not read", readText(fs, t.at("uploads")), std::string("<refused>"));
+
+    // allowRead() of a directory opens what is under it - and still only that.
+    fs.allowRead(muse::io::path_t(t.at("uploads")));
+    CHECK_EQ("under an opened directory", readText(fs, t.at("uploads/other.mscz")), std::string("other"));
+    CHECK_EQ("out of an opened directory", readText(fs, t.at("uploads/../secret.txt")), std::string("<refused>"));
+    // A trailing separator on the root must not change what counts as inside.
+    fs.allowRead(muse::io::path_t(t.at("resources-backup") + "/"));
+    CHECK_EQ("root opened with a trailing slash",
+             readText(fs, t.at("resources-backup/old.xml")), std::string("old"));
+    CHECK_EQ("still nothing beside it", readText(fs, t.at("secret.txt")), std::string("<refused>"));
+}
+
+// ---------------------------------------------------------------------------
 // svgprimitives.h — number, text and blob serialization
 // ---------------------------------------------------------------------------
 
@@ -484,6 +600,7 @@ int main()
 
     testImageFormat();
     testMd4();
+    testEngineFileSystem();
     testFmt();
     testXmlEscape();
     testBase64();

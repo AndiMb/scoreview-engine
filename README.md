@@ -99,7 +99,7 @@ to wasm — the same score takes this route:
 | Embedded pictures | Qt's image plugins decode into a `QImage`, which the SVG generator re-encodes as a PNG data URI | the header is read for the pixel size, the file's own bytes become the data URI — a JPEG stays a JPEG |
 | Page geometry | `width`/`height` in mm, `viewBox` in engraving units (DPI 1200) | the same numbers — the pages are drop-in replacements |
 | Page-1 SVG size | baseline | 58 % of it over the corpus (glyph deduplication) |
-| Title | file name (a random temp name in webmscore) | title text / `workTitle`, or no `<title>` — deterministic across builds |
+| Title | file name (a random temp name in webmscore) | title text / `workTitle` (the metadata also recognizes a title-like text in the first frame), otherwise none: no `<title>`, and `""` from `title()` and `metadata().title` — deterministic across builds |
 
 Up to the paint call both run the same upstream engraving code — what
 differs is which font stack measures the text; from the paint call on, the

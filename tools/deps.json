@@ -147,12 +147,12 @@
           ".github/workflows/build.yml",
           "tools/build-wasm-docker.sh"
         ],
-        "pattern": "emscripten/emsdk:([0-9]+\\.[0-9]+\\.[0-9]+)"
+        "pattern": "emscripten/emsdk:([0-9]+\\.[0-9]+\\.[0-9]+)@sha256:[0-9a-f]{64}"
       },
       "watch": {
         "rule": "emscripten-releases"
       },
-      "note": "Pins the wasm toolchain, and with it the zlib port and the float noise the wasm gate tolerates. A bump means re-measuring that gate."
+      "note": "Pins the wasm toolchain, and with it the zlib port and the float noise the wasm gate tolerates. A bump means re-measuring that gate. Pinned as tag@digest: the pattern refuses a tag without one, and a bump takes the new index digest into both files."
     },
     {
       "name": "ubuntu-runner",

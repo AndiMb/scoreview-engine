@@ -30,7 +30,7 @@ const imported = require(modulePath)
 const WebMscore = imported.default || imported
 
 // Fields that move on their own — keep in step with corpus-native.py.
-const VOLATILE = new Set(['programVersion', 'programRevision', 'mscoreVersion', 'encoding-date', 'title'])
+const VOLATILE = new Set(['programVersion', 'programRevision', 'mscoreVersion', 'encoding-date'])
 
 const stableMeta = (meta) => {
     const out = {}

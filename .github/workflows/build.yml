@@ -66,6 +66,17 @@ jobs:
           test -s build/out/page-1.drawdata.json
           test -s build/out/page-1.svg
 
+      # The corpus is .mscz only, and a plain .mscx takes a different path
+      # through upstream: Dir mode, which asks about the score's directory
+      # before it reads the file. The read confinement once refused exactly
+      # that, and every gate stayed green.
+      - name: Convert test score as plain mscx
+        run: |
+          mkdir -p build/mscx
+          python3 -c 'import zipfile; zipfile.ZipFile("testdata/repeat-test.mscz").extract("repeat-test.mscx", "build/mscx")'
+          build/mscz2media build/mscx/repeat-test.mscx --resources resources --out build/out-mscx --svg --midi
+          test -s build/out-mscx/page-1.svg
+
       # The corpus carries no score with a picture, so nothing else here would
       # notice if embedded images stopped working - and they used to take the
       # whole load down, not just the picture.
@@ -78,13 +89,15 @@ jobs:
       # The corpus gate: fingerprints of MIDI, spos/mpos and metadata for all
       # vtest scores must match the released Qt webmscore (baseline in
       # testdata/). "tracks" is allowed to differ — this build has no audio,
-      # so the metadata track list is always empty.
+      # so the metadata track list is always empty. "title" is absent from
+      # the baseline, which stripped it as volatile; native and wasm compare
+      # it exactly in the job below.
       - name: Corpus
         run: |
           python3 tools/corpus-native.py --bin build/mscz2media --resources resources \
             --scores musescore/vtest/scores --out build/corpus-native.json --with-svg
           python3 tools/corpus-compare.py testdata/corpus-baseline.json build/corpus-native.json \
-            --allow-meta tracks --waivers testdata/corpus-waivers.json
+            --allow-meta tracks --allow-meta title --waivers testdata/corpus-waivers.json
 
       - name: Upload native corpus report
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
@@ -120,7 +133,12 @@ jobs:
           # of musescore-release.yml.
           WORKSPACE: ${{ github.workspace }}
         run: |
-          docker run --rm -v "$WORKSPACE:/src" emscripten/emsdk:6.0.9 bash -c '
+          # Tag for the reader and for check-deps.py, digest for the pull: a
+          # tag on Docker Hub can be re-pushed, and this image is the one
+          # dependency of the build that was pinned by name rather than by
+          # content. It is the multi-arch index digest, as `docker buildx
+          # imagetools inspect emscripten/emsdk:<version>` prints it.
+          docker run --rm -v "$WORKSPACE:/src" emscripten/emsdk:6.0.9@sha256:96617f27fe16421588241def73908fd348a7f9d260440ed0d00b36dcf7a063cc bash -c '
             set -e
             emcmake cmake -S /src -B /src/build-wasm -DCMAKE_BUILD_TYPE=Release
             cmake --build /src/build-wasm --target scoreview -- -j "$(nproc)"
@@ -176,9 +194,25 @@ jobs:
       - name: Version from commit message
         env:
           COMMIT_MSG: ${{ github.event.head_commit.message }}
+        # The tag becomes part of the URL ScoreView pins, and ScoreView reads
+        # the MuseScore version back out of the asset's name
+        # (scoreview-engine-<musescore version>.tgz; bump-musescore.py keeps
+        # the package version on it). So the tag has one shape, and its
+        # MuseScore part has to name the tarball this run built - refused
+        # otherwise, before anything is published.
         run: |
-          VERSION=$(echo "$COMMIT_MSG" | head -1 | cut -d ' ' -f 2)
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          VERSION=$(printf '%s\n' "$COMMIT_MSG" | head -1 | cut -d ' ' -f 2)
+          if ! printf '%s' "$VERSION" | grep -Eqx 'v[0-9]+\.[0-9]+\.[0-9]+-engine\.[0-9]+'; then
+            echo "::error::release tag '$VERSION' is not v<X.Y.Z>-engine.<N>"
+            exit 1
+          fi
+          MUSESCORE=${VERSION#v}
+          MUSESCORE=${MUSESCORE%-engine.*}
+          if [ ! -f "scoreview-engine-$MUSESCORE.tgz" ]; then
+            echo "::error::tag $VERSION, but the tarball is $(ls scoreview-engine-*.tgz)"
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "$VERSION"
 
       - name: Publish to GitHub Releases

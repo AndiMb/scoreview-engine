@@ -51,9 +51,18 @@ public:
         m_allowed.push_back(std::move(p));
     }
 
+    //! Also answers for the directories an opened root sits in. Upstream reads
+    //! a .mscx in Dir mode: MscReader::DirReader takes the score's directory
+    //! as its root and asks whether it exists before it reads the one file it
+    //! wants. Opening that directory for reads would hand a score everything
+    //! beside it; answering exists() for it tells nothing - the ancestors of a
+    //! file that was opened for reading exist by definition.
     muse::Ret exists(const muse::io::path_t& path) const override
     {
-        const std::string real = resolve(path);
+        std::string real = resolve(path);
+        if (real.empty()) {
+            real = ancestorOfRoot(path);
+        }
         if (real.empty()) {
             return muse::make_ret(muse::Ret::Code::UnknownError);
         }
@@ -75,15 +84,22 @@ public:
         if (real.empty()) {
             return muse::make_ret(muse::Ret::Code::UnknownError, "refused read " + filePath.toStdString());
         }
+        // Regular files only. A directory gets past is_open() on glibc, and
+        // what the seek to its end answers depends on the file system: -1 on
+        // some, and on ext4 and overlayfs a huge positive offset, which the
+        // size check below cannot tell from a real size. resize() then threw
+        // std::length_error in the middle of a load - and a score reaches
+        // this with a chordDescriptionFile of "..", which names a directory
+        // inside the resource root.
+        std::error_code ec;
+        if (!std::filesystem::is_regular_file(real, ec)) {
+            return muse::make_ret(muse::Ret::Code::UnknownError, "not a file " + filePath.toStdString());
+        }
         std::ifstream f(real, std::ios::binary | std::ios::ate);
         if (!f.is_open()) {
             return muse::make_ret(muse::Ret::Code::UnknownError, "failed open " + filePath.toStdString());
         }
-        // tellg() answers -1 when the seek failed, and a directory gets this
-        // far on glibc: the open succeeds, the seek does not. The old cast
-        // straight to size_t turned that into a resize() of 2^64-1 bytes —
-        // std::length_error in the middle of a load, for a path that simply
-        // was not a file.
+        // tellg() answers -1 when the seek failed.
         const std::streamoff size = f.tellg();
         if (size < 0) {
             return muse::make_ret(muse::Ret::Code::UnknownError, "failed size " + filePath.toStdString());
@@ -187,6 +203,22 @@ private:
             }
         }
         LOGW() << "refusing a read outside the opened roots: " << s;
+        return std::string();
+    }
+
+    //! `path`, normalized, when an opened root sits under it; otherwise "".
+    //! For exists() only - see there.
+    std::string ancestorOfRoot(const muse::io::path_t& path) const
+    {
+        const std::string full = normalize(path.toStdString());
+        if (full.empty()) {
+            return std::string();
+        }
+        for (const std::string& root : m_allowed) {
+            if (isWithin(root, full)) {
+                return full;
+            }
+        }
         return std::string();
     }
 

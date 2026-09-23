@@ -10,7 +10,8 @@ set -e
 root="$(cd "$(dirname "$0")/.." && pwd)"
 rootw="$(cygpath -m "$root" 2>/dev/null || echo "$root")"
 vol=sve-build-wasm
-image=emscripten/emsdk:6.0.9
+# Same tag and digest as build.yml; a bump changes both, in both files.
+image=emscripten/emsdk:6.0.9@sha256:96617f27fe16421588241def73908fd348a7f9d260440ed0d00b36dcf7a063cc
 
 # Pre-seed HarfBuzz from prefetch/ — the muse_deps download resolves an
 # IPv6-only host and fails inside the container.

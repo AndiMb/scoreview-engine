@@ -59,6 +59,11 @@ class WebMscoreW {
         this.workerURL = url
         /** @private */
         this.terminated = false
+        /**
+         * Rejecters of the calls still waiting for an answer.
+         * @private @type {Set<(err: Error) => void>}
+         */
+        this.pending = new Set()
     }
 
     /**
@@ -116,13 +121,29 @@ class WebMscoreW {
      * @param {Transferable[]} transfer
      */
     async rpc(method, params = [], transfer = []) {
+        // A terminated worker answers nothing, not even with an error event,
+        // so a call made after destroy() would stay pending forever. The
+        // 'destroy' call itself is the one allowed through: destroy() sets
+        // the flag first and still has to reach the worker.
+        if (this.terminated && method !== 'destroy') {
+            throw new Error('This score has been destroyed. Load it again to use it.')
+        }
+
         const id = Math.random()
 
         return new Promise((resolve, reject) => {
             const done = () => {
                 this.worker.removeEventListener('message', listener)
                 this.worker.removeEventListener('error', onError)
+                this.pending.delete(abort)
             }
+
+            // _terminate() settles whatever is still in flight.
+            const abort = (err) => {
+                done()
+                reject(err)
+            }
+            this.pending.add(abort)
 
             const listener = (e) => {
                 /** @type {RPCRes} */
@@ -408,6 +429,9 @@ class WebMscoreW {
     _terminate() {
         this.worker.terminate()
         URL.revokeObjectURL(this.workerURL) // GC
+        for (const abort of [...this.pending]) {
+            abort(new Error('This score has been destroyed. Load it again to use it.'))
+        }
     }
 }
 
