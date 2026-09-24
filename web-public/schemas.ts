@@ -49,6 +49,27 @@ interface ScorePageFormat {
     twosided: BoolString;
 }
 
+interface ScoreKeySig {
+    /** notated measure, 1-based, counted in score order (not the displayed number) */
+    measure: number;
+    /** notated tick (repeats not unrolled) */
+    tick: number;
+    /** sounding key, -7 (7 flats) .. +7 (7 sharps) */
+    concertKey: number;
+    /** mode as written in .mscx; null when the score does not state one */
+    mode: 'none' | 'major' | 'minor' | 'dorian' | 'phrygian' | 'lydian'
+        | 'mixolydian' | 'aeolian' | 'ionian' | 'locrian' | null;
+}
+
+interface ScoreRehearsalMark {
+    /** notated measure, 1-based, counted in score order */
+    measure: number;
+    /** notated tick (repeats not unrolled) */
+    tick: number;
+    /** text without markup */
+    text: string;
+}
+
 interface ScoreExcerptData {
     /**
      * excerpt id
@@ -105,6 +126,19 @@ export interface ScoreMetadata {
      * @todo explanations
      */
     keysig: number;
+
+    /**
+     * Key signatures of the first staff, one entry per change, starting at
+     * measure 1. scoreview-engine only; the stock MuseScore CLI does not
+     * write it.
+     */
+    keySigs?: ScoreKeySig[];
+
+    /**
+     * Rehearsal marks as plain text, in score order.
+     * scoreview-engine only; the stock MuseScore CLI does not write it.
+     */
+    rehearsalMarks?: ScoreRehearsalMark[];
 
     /**
      * ```

@@ -2,19 +2,25 @@
 
 #include <cfloat>
 #include <cmath>
+#include <unordered_map>
 #include <vector>
 
 #include "global/serialization/json.h"
 #include "global/realfn.h"
 
+#include "engraving/dom/keysig.h"
 #include "engraving/dom/masterscore.h"
+#include "engraving/dom/measure.h"
 #include "engraving/dom/measurebase.h"
 #include "engraving/dom/part.h"
+#include "engraving/dom/rehearsalmark.h"
 #include "engraving/dom/segment.h"
+#include "engraving/dom/staff.h"
 #include "engraving/dom/tempotext.h"
 #include "engraving/dom/text.h"
 #include "engraving/dom/timesig.h"
 #include "engraving/style/style.h"
+#include "engraving/types/typesconv.h"
 
 #include "log.h"
 
@@ -291,6 +297,152 @@ static JsonObject typeDataJson(Score* score)
     return typesData;
 }
 
+// Key signatures and rehearsal marks (keySigs, rehearsalMarks)
+//
+// Neither field exists in upstream NotationMeta; both are additions of this
+// repo. They live here and not in the submodule because the MuseScore core
+// stays unpatched (see README, "Architecture") - and there is no reason to
+// touch it: the metadata JSON is built entirely in this file, the core only
+// provides the model read here. The stock MuseScore CLI (--score-media) does
+// not know these fields, so consumers must tolerate their absence.
+//
+// Both lists count the same way:
+// - "measure" is the running number of the measure in the notated chain
+//   (firstMeasure/nextMeasure), 1-based. Deliberately not Measure::no():
+//   that is the *displayed* number, shifted by a measure number offset and
+//   by irregular measures (pickups) - a consumer addressing measures by
+//   their order would be off. Deliberately not the MM chain either:
+//   multi-measure rests are presentation, not measures.
+// - "tick" is the notated tick, not the unrolled one - repeats are unrolled
+//   by the consumer on its own timeline.
+
+// Running, 1-based measure number for each measure of the notated chain.
+static std::unordered_map<const Measure*, int> measureNumbers(const Score* score)
+{
+    std::unordered_map<const Measure*, int> numbers;
+    int n = 0;
+    for (const Measure* m = score->firstMeasure(); m; m = m->nextMeasure()) {
+        numbers[m] = ++n;
+    }
+    return numbers;
+}
+
+// Key::INVALID means "no key signature set", musically zero accidentals.
+// A sentinel value in the JSON would be a trap for every consumer.
+static int concertKeyValue(const KeySigEvent& ev)
+{
+    const Key key = ev.concertKey();
+    return key == Key::INVALID ? 0 : static_cast<int>(key);
+}
+
+static JsonObject keySigJson(int measure, int tick, const KeySigEvent& ev)
+{
+    JsonObject k;
+    k.set("measure", measure);
+    k.set("tick", tick);
+    k.set("concertKey", concertKeyValue(ev));
+    // "unknown" becomes null: most scores set no mode, and a consumer must
+    // not mistake "not stated" for a mode called "unknown". All other values
+    // use the .mscx spelling (TConv::toXml), so there is exactly one
+    // vocabulary.
+    if (ev.mode() == KeyMode::UNKNOWN) {
+        JsonValue nullMode;
+        nullMode.setNull();
+        k.set("mode", nullMode);
+    } else {
+        k.set("mode", std::string(std::string_view(TConv::toXml(ev.mode()))));
+    }
+    return k;
+}
+
+// Sounding key, one entry per key change, from the first staff.
+//
+// The first staff is enough: concertKey() is the sounding key and thus the
+// same on every staff; transposing instruments differ only in the notated
+// key. The KeySig elements themselves are read, not staff->keyList(): only
+// the element knows whether layout created it (generated() - the courtesy
+// repeat at the start of a system), and only real changes should appear.
+static JsonArray keySigsJson(const Score* score, const std::unordered_map<const Measure*, int>& numbers)
+{
+    JsonArray list;
+    const Staff* staff = score->staff(0);
+    const Measure* first = score->firstMeasure();
+    if (!staff || !first) {
+        return list;
+    }
+
+    bool havePrev = false;
+    int prevKey = 0;
+    KeyMode prevMode = KeyMode::UNKNOWN;
+    auto push = [&](int measure, int tick, const KeySigEvent& ev) {
+        const int k = concertKeyValue(ev);
+        // The same key again (e.g. restated after a section break) is not a
+        // change.
+        if (havePrev && k == prevKey && ev.mode() == prevMode) {
+            return;
+        }
+        list.append(keySigJson(measure, tick, ev));
+        havePrev = true;
+        prevKey = k;
+        prevMode = ev.mode();
+    };
+
+    // Without a key signature at the start (C major is often only implicit)
+    // measure 1 carries the key the staff knows there - so the list always
+    // starts at measure 1 and a consumer needs no default.
+    bool haveStart = false;
+    for (const Measure* m = first; m; m = m->nextMeasure()) {
+        for (const Segment* s = m->first(SegmentType::KeySig); s; s = s->next(SegmentType::KeySig)) {
+            const EngravingItem* e = s->element(0);
+            if (!e || !e->isKeySig() || e->generated()) {
+                continue;
+            }
+            if (!haveStart && s->tick().isNotZero()) {
+                push(1, 0, staff->keySigEvent(Fraction(0, 1)));
+            }
+            haveStart = true;
+            const auto it = numbers.find(m);
+            push(it != numbers.end() ? it->second : 0, s->tick().ticks(), toKeySig(e)->keySigEvent());
+        }
+    }
+    if (!haveStart) {
+        push(1, 0, staff->keySigEvent(Fraction(0, 1)));
+    }
+    return list;
+}
+
+// Rehearsal marks as plain text, in score order.
+//
+// plainText() rather than xmlText(): the text may carry formatting
+// (<b>, <font ...>), and a consumer wants the letter, not the markup.
+// A system text can appear as a copy on further staves; per segment only the
+// one on the topmost staff counts, so a mark is not listed more than once.
+static JsonArray rehearsalMarksJson(const Score* score, const std::unordered_map<const Measure*, int>& numbers)
+{
+    JsonArray list;
+    for (const Measure* m = score->firstMeasure(); m; m = m->nextMeasure()) {
+        const auto it = numbers.find(m);
+        const int measure = it != numbers.end() ? it->second : 0;
+        for (const Segment* s = m->first(); s; s = s->next()) {
+            const RehearsalMark* found = nullptr;
+            for (const EngravingItem* a : s->annotations()) {
+                if (a && a->isRehearsalMark() && (!found || a->staffIdx() < found->staffIdx())) {
+                    found = toRehearsalMark(a);
+                }
+            }
+            if (!found) {
+                continue;
+            }
+            JsonObject r;
+            r.set("measure", measure);
+            r.set("tick", s->tick().ticks());
+            r.set("text", found->plainText());
+            list.append(r);
+        }
+    }
+    return list;
+}
+
 String ScoreMeta::title(const Score* score)
 {
     return scoreTitle(score);
@@ -305,12 +457,14 @@ ByteArray ScoreMeta::json(Score* score)
     JsonObject json;
 
     auto _tempo = tempo(score);
+    const auto numbers = measureNumbers(score);
 
     json.set("composer", composer(score));
     json.set("duration", score->duration());
     json.set("fileVersion", score->mscVersion());
     json.set("hasHarmonies", boolToString(score->hasHarmonies()));
     json.set("hasLyrics", boolToString(score->hasLyrics()));
+    json.set("keySigs", keySigsJson(score, numbers));
     json.set("keysig", static_cast<int>(score->keysig()));
     json.set("lyrics", score->extractLyrics());
     json.set("measures", static_cast<int>(score->nmeasures()));
@@ -320,6 +474,7 @@ ByteArray ScoreMeta::json(Score* score)
     json.set("parts", partsJsonArray(score));
     json.set("poet", poet(score));
     json.set("previousSource", score->metaTag(u"source"));
+    json.set("rehearsalMarks", rehearsalMarksJson(score, numbers));
     json.set("subtitle", subtitle(score));
     json.set("tempo", _tempo.first);
     json.set("tempoText", _tempo.second);
