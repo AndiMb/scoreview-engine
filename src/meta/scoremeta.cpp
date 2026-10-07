@@ -1,17 +1,25 @@
 #include "scoremeta.h"
 
+#include <algorithm>
 #include <cfloat>
 #include <cmath>
+#include <map>
 #include <unordered_map>
 #include <vector>
 
 #include "global/serialization/json.h"
 #include "global/realfn.h"
 
+#include "engraving/dom/articulation.h"
+#include "engraving/dom/chord.h"
+#include "engraving/dom/chordrest.h"
 #include "engraving/dom/keysig.h"
+#include "engraving/dom/lyrics.h"
 #include "engraving/dom/masterscore.h"
 #include "engraving/dom/measure.h"
 #include "engraving/dom/measurebase.h"
+#include "engraving/dom/note.h"
+#include "engraving/dom/ornament.h"
 #include "engraving/dom/part.h"
 #include "engraving/dom/rehearsalmark.h"
 #include "engraving/dom/segment.h"
@@ -19,8 +27,11 @@
 #include "engraving/dom/tempotext.h"
 #include "engraving/dom/text.h"
 #include "engraving/dom/timesig.h"
+#include "engraving/dom/trill.h"
 #include "engraving/style/style.h"
 #include "engraving/types/typesconv.h"
+
+#include "positions/segmentindex.h"
 
 #include "log.h"
 
@@ -443,6 +454,230 @@ static JsonArray rehearsalMarksJson(const Score* score, const std::unordered_map
     return list;
 }
 
+// Lyric syllables and note spellings (lyricSyllables, noteSpellings)
+//
+// Additions of this repo like keySigs/rehearsalMarks above, and for the same
+// reason built here and not in the submodule. Unlike those two lists they are
+// addressed by "elid", not by measure: the number chordRestSegmentIndex()
+// gives a ChordRest segment - the same number the position export hands to a
+// player as the event id and the SVG export stamps as "seg-N" on what it
+// draws. A consumer can thus put a syllable or a note name next to the
+// notehead that sounds, without guessing from coordinates. Both walk the MM
+// chain for that reason: another chain would be another numbering.
+
+// Whether a staff of this measure is drawn at all - the condition
+// Measure::scanElements and Segment::scanElements apply before they hand
+// anything of that staff to Page::elements(), which the SVG writer paints.
+static bool staffDrawn(const Measure* m, staff_idx_t staffIdx, const Score* score)
+{
+    return m->visible(staffIdx) && score->staff(staffIdx)->show();
+}
+
+// Upper bound for lyricSyllables. Beyond it the field is left out entirely
+// rather than truncated: half a text is worse than none, and a consumer must
+// be able to tell "too much" (field missing, hasLyrics "true") from "none"
+// (empty list). 20000 syllables is several times an oratorio's choir part.
+static constexpr size_t MAX_LYRIC_SYLLABLES = 20000;
+
+// Every lyric syllable, ordered by elid, then staff, voice and verse.
+// Returns false when there are more than MAX_LYRIC_SYLLABLES.
+//
+// Not Score::lyrics() / extractLyrics(): those unroll repeats through
+// playbackCount and write it back into the model - a metadata call must not
+// change what a later export sees. The repeat structure is the consumer's
+// (it has the unrolled timeline from the positions); here a verse is just
+// its number, 0-based as in the model.
+//
+// Only visible lyrics on staves that are drawn: the list is what the reader
+// sees under the notes. plainText() rather than xmlText(), as for rehearsal
+// marks - the syllable, not its formatting. "syllabic" uses the .mscx
+// vocabulary (single/begin/middle/end), so a consumer joins a word exactly
+// where MuseScore draws the hyphen; "melisma" says an extender line follows.
+static bool lyricSyllablesJson(const Score* score, const std::unordered_map<const Segment*, int>& ids, JsonArray& out)
+{
+    size_t count = 0;
+    const size_t tracks = score->ntracks();
+    const Measure* first = score->firstMeasureMM();
+    for (const Segment* s = first ? first->first(SegmentType::ChordRest) : nullptr; s;
+         s = s->next1MM(SegmentType::ChordRest)) {
+        const auto id = ids.find(s);
+        if (id == ids.end()) {
+            continue;
+        }
+        for (track_idx_t track = 0; track < tracks; ++track) {
+            const EngravingItem* e = s->element(track);
+            if (!e || !e->isChordRest() || !staffDrawn(s->measure(), track / VOICES, score)) {
+                continue;
+            }
+            std::vector<const Lyrics*> lyrics;
+            for (const Lyrics* l : toChordRest(e)->lyrics()) {
+                if (l && l->visible()) {
+                    lyrics.push_back(l);
+                }
+            }
+            // The model keeps them in insertion order; verses entered out of
+            // order would otherwise come out swapped. Stable, so two lines
+            // with the same number (above and below the staff) keep theirs.
+            std::stable_sort(lyrics.begin(), lyrics.end(),
+                             [](const Lyrics* a, const Lyrics* b) { return a->verse() < b->verse(); });
+            for (const Lyrics* l : lyrics) {
+                if (++count > MAX_LYRIC_SYLLABLES) {
+                    return false;
+                }
+                JsonObject o;
+                o.set("elid", id->second);
+                o.set("staff", static_cast<int>(track / VOICES));
+                o.set("voice", static_cast<int>(track % VOICES));
+                o.set("verse", l->verse());
+                o.set("syllabic", std::string(std::string_view(TConv::toXml(l->syllabic()))));
+                o.set("text", l->plainText());
+                o.set("melisma", l->isMelisma());
+                out.append(o);
+            }
+        }
+    }
+    return true;
+}
+
+// Whether the SVG writer paints this note: Page::elements() leaves out
+// invisible items (getChildren(false)), and the writer skips items that do
+// not collect for drawing or have no bounding box.
+static bool noteDrawn(const Note* n)
+{
+    return n->visible() && n->collectForDrawing()
+           && n->ldata() && n->ldata()->isSetBbox() && !n->ldata()->bbox().isEmpty();
+}
+
+// The notes Chord::scanElements hands to Page::elements() for one chord, in
+// its order: first the cue notes of its ornaments (articulations are scanned
+// before the notes - the auxiliary note of a turn or mordent drawn small
+// beside the main note), then the chord's own notes, ascending, then its
+// grace chords - before and after - in model order, each again the same way.
+// Grace and cue chords are reached through the main chord, and the writer's
+// findAncestor(SEGMENT) gives their noteheads the main chord's classes.
+static void collectNotes(const Chord* chord, std::vector<EngravingItem*>& out)
+{
+    for (const Articulation* a : chord->articulations()) {
+        if (a && a->isOrnament()) {
+            if (const Chord* cue = toOrnament(a)->cueNoteChord()) {
+                collectNotes(cue, out);
+            }
+        }
+    }
+    for (Note* n : chord->notes()) {
+        out.push_back(n);
+    }
+    for (const Chord* grace : chord->graceNotes()) {
+        collectNotes(grace, out);
+    }
+}
+
+// Cue chords of trill lines, by the segment and track their noteheads are
+// classed with. A trill's cue note is not reached through its chord but
+// through the line (TrillSegment::scanElements), and lines are scanned per
+// system after all of the system's measures (Page::scanElements) - so these
+// notes come after everything collectNotes() finds for the same chord. The
+// cue chord's parent is the start chord's segment, which is where seg-N
+// comes from. Several trills on one chord follow the spanner map's order.
+using CueKey = std::pair<const Segment*, track_idx_t>;
+static std::map<CueKey, std::vector<const Chord*> > trillCueChords(const Score* score)
+{
+    std::map<CueKey, std::vector<const Chord*> > cues;
+    for (const auto& entry : score->spanner()) {
+        const Spanner* sp = entry.second;
+        if (!sp || !sp->isTrill()) {
+            continue;
+        }
+        const Chord* cue = toTrill(sp)->cueNoteChord();
+        const EngravingItem* segment = cue ? cue->findAncestor(ElementType::SEGMENT) : nullptr;
+        if (segment) {
+            cues[{ toSegment(segment), cue->track() }].push_back(cue);
+        }
+    }
+    return cues;
+}
+
+// Pitch and spelling of every drawn notehead, one entry per chord, keyed like
+// the SVG class of its noteheads: "seg-<elid> st-<staff> vc-<voice>".
+//
+// The consumer assigns the n-th pair of "notes" to the n-th Note element
+// with that class in the SVG, so the list has to hold exactly those
+// noteheads, in exactly their document order:
+// - Grace notes and the cue notes of ornaments and trills are included
+//   (collectNotes, trillCueChords): they carry the main chord's seg/st/vc,
+//   and leaving one out would pair every later note of the key with the
+//   wrong head.
+// - Notes the writer does not paint (noteDrawn, staffDrawn, disabled
+//   segments) are left out.
+// - The writer stable-sorts all page elements by elementLessThan. Within one
+//   key all notes share the track, so only z can reorder them (a user-set
+//   stacking order); the same stable sort here keeps the order identical
+//   instead of relying on that being rare.
+//
+// "pitch" is the sounding MIDI pitch, ppitch(): the stored pitch plus the
+// ottava/capo offset (for drums the variant's pitch) - what the MIDI
+// renderer plays (compatmidirenderinternal: note->ppitch()). Under an 8va
+// the plain pitch() would be an octave off the sound. Transposing
+// instruments need no correction: the model's pitch is concert pitch.
+//
+// "tpc" is the spelling as written in the notation the SVG shows: tpc(),
+// which follows the score's concert-pitch setting the layout used - tpc2
+// (transposed) normally, tpc1 when the score was saved in concert pitch. An
+// ottava does not change the spelling, so a note name derived from it is the
+// name of the notehead the reader sees.
+static JsonArray noteSpellingsJson(const Score* score, const std::unordered_map<const Segment*, int>& ids)
+{
+    JsonArray list;
+    const auto trillCues = trillCueChords(score);
+    const size_t tracks = score->ntracks();
+    const Measure* first = score->firstMeasureMM();
+    for (const Segment* s = first ? first->first(SegmentType::ChordRest) : nullptr; s;
+         s = s->next1MM(SegmentType::ChordRest)) {
+        const auto id = ids.find(s);
+        if (id == ids.end() || !s->enabled()) {
+            continue;
+        }
+        for (track_idx_t track = 0; track < tracks; ++track) {
+            const EngravingItem* e = s->element(track);
+            if (!e || !e->isChord() || !staffDrawn(s->measure(), track / VOICES, score)) {
+                continue;
+            }
+            const Chord* chord = toChord(e);
+            std::vector<EngravingItem*> notes;
+            collectNotes(chord, notes);
+            const auto trills = trillCues.find({ s, track });
+            if (trills != trillCues.end()) {
+                for (const Chord* cue : trills->second) {
+                    collectNotes(cue, notes);
+                }
+            }
+            notes.erase(std::remove_if(notes.begin(), notes.end(),
+                                       [](const EngravingItem* n) { return !noteDrawn(toNote(n)); }),
+                        notes.end());
+            if (notes.empty()) {
+                continue;
+            }
+            std::stable_sort(notes.begin(), notes.end(), elementLessThan);
+
+            JsonArray pairs;
+            for (const EngravingItem* item : notes) {
+                const Note* n = toNote(item);
+                JsonArray pair;
+                pair.append(n->ppitch());
+                pair.append(n->tpc());
+                pairs.append(pair);
+            }
+            JsonObject o;
+            o.set("elid", id->second);
+            o.set("staff", static_cast<int>(track / VOICES));
+            o.set("voice", static_cast<int>(track % VOICES));
+            o.set("notes", pairs);
+            list.append(o);
+        }
+    }
+    return list;
+}
+
 String ScoreMeta::title(const Score* score)
 {
     return scoreTitle(score);
@@ -458,6 +693,9 @@ ByteArray ScoreMeta::json(Score* score)
 
     auto _tempo = tempo(score);
     const auto numbers = measureNumbers(score);
+    const auto segmentIds = chordRestSegmentIndex(score);
+    JsonArray syllables;
+    const bool syllablesComplete = lyricSyllablesJson(score, segmentIds, syllables);
 
     json.set("composer", composer(score));
     json.set("duration", score->duration());
@@ -466,9 +704,13 @@ ByteArray ScoreMeta::json(Score* score)
     json.set("hasLyrics", boolToString(score->hasLyrics()));
     json.set("keySigs", keySigsJson(score, numbers));
     json.set("keysig", static_cast<int>(score->keysig()));
+    if (syllablesComplete) {
+        json.set("lyricSyllables", syllables);
+    }
     json.set("lyrics", score->extractLyrics());
     json.set("measures", static_cast<int>(score->nmeasures()));
     json.set("mscoreVersion", score->mscoreVersion());
+    json.set("noteSpellings", noteSpellingsJson(score, segmentIds));
     json.set("pageFormat", pageFormatJson(score->style()));
     json.set("pages", static_cast<int>(score->npages()));
     json.set("parts", partsJsonArray(score));

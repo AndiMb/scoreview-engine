@@ -70,6 +70,39 @@ interface ScoreRehearsalMark {
     text: string;
 }
 
+interface ScoreLyricSyllable {
+    /** ChordRest segment index: the elid of the positions, "seg-N" in the SVG */
+    elid: number;
+    /** staff index, 0-based */
+    staff: number;
+    /** voice within the staff, 0..3 */
+    voice: number;
+    /** verse, 0-based (repeats not unrolled) */
+    verse: number;
+    /** hyphenation as written in .mscx */
+    syllabic: 'single' | 'begin' | 'middle' | 'end';
+    /** text without markup */
+    text: string;
+    /** an extender line follows the syllable */
+    melisma: boolean;
+}
+
+interface ScoreNoteSpelling {
+    /** ChordRest segment index: the elid of the positions, "seg-N" in the SVG */
+    elid: number;
+    /** staff index, 0-based ("st-N" in the SVG) */
+    staff: number;
+    /** voice within the staff, 0..3 ("vc-N" in the SVG) */
+    voice: number;
+    /**
+     * [sounding MIDI pitch (ottava included, as played), tpc as written in
+     * the notation shown] per notehead, in the SVG's document order of the
+     * Note elements with this seg/st/vc class - grace notes included, after
+     * the chord's own notes
+     */
+    notes: [number, number][];
+}
+
 interface ScoreExcerptData {
     /**
      * excerpt id
@@ -139,6 +172,19 @@ export interface ScoreMetadata {
      * scoreview-engine only; the stock MuseScore CLI does not write it.
      */
     rehearsalMarks?: ScoreRehearsalMark[];
+
+    /**
+     * Every visible lyric syllable, ordered by elid, staff, voice, verse.
+     * Missing when the score has more than 20000 syllables (and in output of
+     * the stock MuseScore CLI, which does not write it).
+     */
+    lyricSyllables?: ScoreLyricSyllable[];
+
+    /**
+     * Pitch and written spelling of every drawn notehead, one entry per
+     * chord. scoreview-engine only; the stock MuseScore CLI does not write it.
+     */
+    noteSpellings?: ScoreNoteSpelling[];
 
     /**
      * ```
