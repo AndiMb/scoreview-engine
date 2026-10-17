@@ -61,6 +61,19 @@ interface ScoreKeySig {
         | 'mixolydian' | 'aeolian' | 'ionian' | 'locrian' | null;
 }
 
+interface ScoreMeasureFact {
+    /** notated measure, 1-based, counted in score order - same numbering as keySigs */
+    measure: number;
+    /** notated start tick (repeats not unrolled), 480 per quarter */
+    tick: number;
+    /** nominal time signature, numerator */
+    sigN: number;
+    /** nominal time signature, denominator */
+    sigD: number;
+    /** actual length in ticks; shorter than nominal for a pickup, longer for an irregular measure */
+    ticks: number;
+}
+
 interface ScoreRehearsalMark {
     /** notated measure, 1-based, counted in score order */
     measure: number;
@@ -94,6 +107,8 @@ interface ScoreNoteSpelling {
     staff: number;
     /** voice within the staff, 0..3 ("vc-N" in the SVG) */
     voice: number;
+    /** notated tick of the segment (repeats not unrolled), 480 per quarter - the scale of measureFacts */
+    tick: number;
     /**
      * [sounding MIDI pitch (ottava included, as played), tpc as written in
      * the notation shown] per notehead, in the SVG's document order of the
@@ -166,6 +181,13 @@ export interface ScoreMetadata {
      * write it.
      */
     keySigs?: ScoreKeySig[];
+
+    /**
+     * Nominal time signature and actual length of every notated measure, in
+     * score order (repeats not unrolled). scoreview-engine only; the stock
+     * MuseScore CLI does not write it.
+     */
+    measureFacts?: ScoreMeasureFact[];
 
     /**
      * Rehearsal marks as plain text, in score order.

@@ -103,6 +103,7 @@ jobs:
             --allow-meta tracks --allow-meta title \
             --allow-meta keySigs --allow-meta rehearsalMarks \
             --allow-meta lyricSyllables --allow-meta noteSpellings \
+            --allow-meta measureFacts \
             --waivers testdata/corpus-waivers.json
 
       - name: Upload native corpus report

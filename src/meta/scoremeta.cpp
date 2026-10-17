@@ -422,6 +422,36 @@ static JsonArray keySigsJson(const Score* score, const std::unordered_map<const 
     return list;
 }
 
+// Time signature and real length of every notated measure (measureFacts).
+//
+// Another addition of this repo, next to keySigs and with the same
+// numbering: the notated chain, repeats not unrolled, a multi-measure rest
+// as its underlying measures. A consumer that needs the beats of a measure
+// - a metronome, beat numbers over the notes - gets the nominal signature
+// and the real length, because the two differ exactly where a guess from
+// the measure's duration fails: a pickup is shorter than its signature says,
+// an irregular measure longer. The position export only tells when a measure
+// starts, not what it is.
+//
+// timesig() is the nominal signature the measure was laid out with, ticks()
+// the actual length, tick() the notated start, 480 per quarter like every
+// tick here. Consecutive measures satisfy tick[i+1] == tick[i] + ticks[i].
+static JsonArray measureFactsJson(const Score* score, const std::unordered_map<const Measure*, int>& numbers)
+{
+    JsonArray list;
+    for (const Measure* m = score->firstMeasure(); m; m = m->nextMeasure()) {
+        const auto it = numbers.find(m);
+        JsonObject f;
+        f.set("measure", it != numbers.end() ? it->second : 0);
+        f.set("tick", m->tick().ticks());
+        f.set("sigN", m->timesig().numerator());
+        f.set("sigD", m->timesig().denominator());
+        f.set("ticks", m->ticks().ticks());
+        list.append(f);
+    }
+    return list;
+}
+
 // Rehearsal marks as plain text, in score order.
 //
 // plainText() rather than xmlText(): the text may carry formatting
@@ -625,6 +655,11 @@ static std::map<CueKey, std::vector<const Chord*> > trillCueChords(const Score* 
 // (transposed) normally, tpc1 when the score was saved in concert pitch. An
 // ottava does not change the spelling, so a note name derived from it is the
 // name of the notehead the reader sees.
+//
+// "tick" is the segment's notated tick (repeats not unrolled, 480 per
+// quarter) - the scale of measureFacts, so "where in its measure does this
+// chord stand" is tick minus the measure's tick, exact, without a detour
+// through milliseconds and tempo.
 static JsonArray noteSpellingsJson(const Score* score, const std::unordered_map<const Segment*, int>& ids)
 {
     JsonArray list;
@@ -671,6 +706,7 @@ static JsonArray noteSpellingsJson(const Score* score, const std::unordered_map<
             o.set("elid", id->second);
             o.set("staff", static_cast<int>(track / VOICES));
             o.set("voice", static_cast<int>(track % VOICES));
+            o.set("tick", s->tick().ticks());
             o.set("notes", pairs);
             list.append(o);
         }
@@ -708,6 +744,7 @@ ByteArray ScoreMeta::json(Score* score)
         json.set("lyricSyllables", syllables);
     }
     json.set("lyrics", score->extractLyrics());
+    json.set("measureFacts", measureFactsJson(score, numbers));
     json.set("measures", static_cast<int>(score->nmeasures()));
     json.set("mscoreVersion", score->mscoreVersion());
     json.set("noteSpellings", noteSpellingsJson(score, segmentIds));
