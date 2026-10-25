@@ -1,8 +1,9 @@
 // scoreview-engine wasm entry — the Qt-free successor of webmscore's
 // web/main.cpp, exposing the same C ABI for the supported surface: load,
-// SVG, MIDI, spos/mpos, metadata, destroy. Everything the Qt build did
-// through Qt (audio, PNG/PDF, MusicXML, excerpts) is not exported; the JS
-// wrapper throws before the boundary. Responses use the WasmRes layout the
+// SVG, MIDI, spos/mpos, metadata, destroy - and views (src/view/): stored
+// and generated excerpts, page format, concert pitch, transposition.
+// Everything the Qt build did through Qt (audio, PNG/PDF, MusicXML) is not
+// exported; the JS wrapper throws before the boundary. Responses use the WasmRes layout the
 // wrapper's helper.js reads (see web/wasmres.h).
 
 #include <emscripten/emscripten.h>
@@ -25,6 +26,8 @@
 #include "log.h"
 
 #include "engraving/dom/masterscore.h"
+#include "engraving/dom/part.h"
+#include "global/serialization/json.h"
 #include "engraving/types/constants.h"
 
 #include "api/scoreloader.h"
@@ -33,6 +36,7 @@
 #include "positions/positionswriter.h"
 #include "shadow/exportmidi.h"
 #include "svg/svgwriter.h"
+#include "view/scoreview.h"
 
 #include "./wasmres.h"
 
@@ -54,6 +58,11 @@ static MasterScore* scoreOf(uintptr_t score_ptr)
 {
     auto score = reinterpret_cast<MasterScore*>(score_ptr);
     return s_instances.count(score) ? score : nullptr;
+}
+
+static WasmRes noSuchExcerpt(int excerptId)
+{
+    return WasmRes::error(static_cast<int>(Ret::Code::UnknownError), String(u"no such excerpt: %1").arg(excerptId));
 }
 
 static WasmRes badScorePtr()
@@ -270,10 +279,11 @@ WasmResBytes npages(uintptr_t score_ptr, int excerptId)
     if (!score) {
         return badScorePtr();
     }
-    if (excerptId != -1) {
-        return notSupported("excerpts");
+    Score* view = sve::ScoreViews::score(score, excerptId);
+    if (!view) {
+        return noSuchExcerpt(excerptId);
     }
-    return guarded("npages", [&]() { return WasmRes(static_cast<uint32_t>(score->npages())); });
+    return guarded("npages", [&]() { return WasmRes(static_cast<uint32_t>(view->npages())); });
 }
 
 EMSCRIPTEN_KEEPALIVE
@@ -283,13 +293,14 @@ WasmResBytes saveSvg(uintptr_t score_ptr, int pageNumber, bool drawPageBackgroun
     if (!score) {
         return badScorePtr();
     }
-    if (excerptId != -1) {
-        return notSupported("excerpts");
+    Score* view = sve::ScoreViews::score(score, excerptId);
+    if (!view) {
+        return noSuchExcerpt(excerptId);
     }
     return guarded("saveSvg", [&]() -> WasmRes {
         sve::SvgWriter::Options opt;
         opt.drawPageBackground = drawPageBackground;
-        ByteArray svg = sve::SvgWriter::write(score, static_cast<size_t>(pageNumber), opt);
+        ByteArray svg = sve::SvgWriter::write(view, static_cast<size_t>(pageNumber), opt);
         if (svg.empty()) {
             return WasmRes::error(static_cast<int>(Ret::Code::UnknownError), u"no such page");
         }
@@ -304,8 +315,10 @@ WasmResBytes saveMidi(uintptr_t score_ptr, bool midiExpandRepeats, bool exportRP
     if (!score) {
         return badScorePtr();
     }
+    // A view changes the picture, not the piece: it plays the main score's
+    // MIDI (src/view/scoreview.h). An excerpt's own MIDI is not offered.
     if (excerptId != -1) {
-        return notSupported("excerpts");
+        return notSupported("MIDI of an excerpt");
     }
     return guarded("saveMidi", [&]() -> WasmRes {
         io::Buffer buf;
@@ -319,20 +332,22 @@ WasmResBytes saveMidi(uintptr_t score_ptr, bool midiExpandRepeats, bool exportRP
     });
 }
 
-EMSCRIPTEN_KEEPALIVE
-WasmResBytes savePositions(uintptr_t score_ptr, bool ofSegments, int excerptId)
+}  // extern "C" - the helper below is not part of the ABI
+
+static WasmRes positions(uintptr_t score_ptr, bool ofSegments, int excerptId, bool measuresOfMain)
 {
     MasterScore* score = scoreOf(score_ptr);
     if (!score) {
         return badScorePtr();
     }
-    if (excerptId != -1) {
-        return notSupported("excerpts");
+    Score* view = sve::ScoreViews::score(score, excerptId);
+    if (!view) {
+        return noSuchExcerpt(excerptId);
     }
     return guarded("savePositions", [&]() -> WasmRes {
         sve::PositionsWriter writer(ofSegments ? sve::PositionsWriter::ElementType::SEGMENT
                                                : sve::PositionsWriter::ElementType::MEASURE);
-        ByteArray json = writer.json(score);
+        ByteArray json = writer.json(view, measuresOfMain ? score : nullptr);
         if (json.empty()) {
             // The writer answers emptily for a score that was never laid out.
             return WasmRes::error(static_cast<int>(Ret::Code::UnknownError),
@@ -340,6 +355,21 @@ WasmResBytes savePositions(uintptr_t score_ptr, bool ofSegments, int excerptId)
         }
         return WasmRes(json);
     });
+}
+
+extern "C" {
+EMSCRIPTEN_KEEPALIVE
+WasmResBytes savePositions(uintptr_t score_ptr, bool ofSegments, int excerptId)
+{
+    return positions(score_ptr, ofSegments, excerptId, false);
+}
+
+//! Positions of a view whose measures are numbered as the main score numbers
+//! them - one measure count across every view (src/positions/).
+EMSCRIPTEN_KEEPALIVE
+WasmResBytes saveViewPositions(uintptr_t score_ptr, bool ofSegments, int excerptId)
+{
+    return positions(score_ptr, ofSegments, excerptId, true);
 }
 
 EMSCRIPTEN_KEEPALIVE
@@ -353,6 +383,102 @@ WasmResBytes saveMetadata(uintptr_t score_ptr)
 }
 
 EMSCRIPTEN_KEEPALIVE
+WasmResBytes saveViewMetadata(uintptr_t score_ptr, int excerptId)
+{
+    MasterScore* score = scoreOf(score_ptr);
+    if (!score) {
+        return badScorePtr();
+    }
+    Score* view = sve::ScoreViews::score(score, excerptId);
+    if (!view) {
+        return noSuchExcerpt(excerptId);
+    }
+    return guarded("saveMetadata", [&]() { return WasmRes(sve::ScoreMeta::json(view)); });
+}
+
+//! partIdsJson: a JSON array of part ids for one excerpt holding exactly
+//! those parts; an empty array asks for one excerpt per part (webmscore's
+//! generateExcerpts()). Answers the new view ids as a JSON array.
+EMSCRIPTEN_KEEPALIVE
+WasmResBytes generateExcerpts(uintptr_t score_ptr, const char* partIdsJson)
+{
+    MasterScore* score = scoreOf(score_ptr);
+    if (!score) {
+        return badScorePtr();
+    }
+    return guarded("generateExcerpts", [&]() -> WasmRes {
+        std::string parseError;
+        const std::string text = partIdsJson ? partIdsJson : "[]";
+        const JsonDocument doc = JsonDocument::fromJson(ByteArray(text.data(), text.size()), &parseError);
+        if (!parseError.empty() || !doc.isArray()) {
+            return WasmRes::error(static_cast<int>(Ret::Code::UnknownError), u"part ids are not a JSON array");
+        }
+        const JsonArray requested = doc.rootArray();
+        std::vector<std::vector<std::string> > groups;
+        if (requested.size() == 0) {
+            for (const Part* part : score->parts()) {
+                groups.push_back({ part->id().toStdString() });
+            }
+        } else {
+            std::vector<std::string> ids;
+            for (size_t i = 0; i < requested.size(); ++i) {
+                ids.push_back(requested.at(i).toStdString());
+            }
+            groups.push_back(ids);
+        }
+        JsonArray created;
+        for (const auto& ids : groups) {
+            String error;
+            const int id = sve::ScoreViews::generateExcerpt(score, ids, &error);
+            if (id < 0) {
+                return WasmRes::error(static_cast<int>(Ret::Code::UnknownError), error);
+            }
+            created.append(id);
+        }
+        return WasmRes(JsonDocument(created).toJson(JsonDocument::Format::Compact));
+    });
+}
+
+//! Applies {"format","concertPitch","transposeSemitones"} to a view and lays
+//! it out again; answers its page count. One view per load: the changes are
+//! edits of the score, and nothing here takes them back.
+EMSCRIPTEN_KEEPALIVE
+WasmResBytes applyView(uintptr_t score_ptr, int excerptId, const char* optionsJson)
+{
+    MasterScore* score = scoreOf(score_ptr);
+    if (!score) {
+        return badScorePtr();
+    }
+    Score* view = sve::ScoreViews::score(score, excerptId);
+    if (!view) {
+        return noSuchExcerpt(excerptId);
+    }
+    return guarded("applyView", [&]() -> WasmRes {
+        sve::ViewOptions options;
+        String error;
+        if (!sve::ScoreViews::parseOptions(optionsJson ? optionsJson : "", options, &error)
+            || !sve::ScoreViews::apply(view, options, &error)) {
+            return WasmRes::error(static_cast<int>(Ret::Code::UnknownError), error);
+        }
+        return WasmRes(static_cast<uint32_t>(view->npages()));
+    });
+}
+
+EMSCRIPTEN_KEEPALIVE
+WasmResBytes viewMapping(uintptr_t score_ptr, int excerptId)
+{
+    MasterScore* score = scoreOf(score_ptr);
+    if (!score) {
+        return badScorePtr();
+    }
+    Score* view = sve::ScoreViews::score(score, excerptId);
+    if (!view) {
+        return noSuchExcerpt(excerptId);
+    }
+    return guarded("viewMapping", [&]() { return WasmRes(sve::ScoreViews::mapping(score, view)); });
+}
+
+EMSCRIPTEN_KEEPALIVE
 void destroy(uintptr_t score_ptr)
 {
     MasterScore* score = scoreOf(score_ptr);
@@ -360,6 +486,7 @@ void destroy(uintptr_t score_ptr)
         return;
     }
     s_instances.erase(score);
+    sve::ScoreViews::forget(score);
     try {
         delete score;
     } catch (...) {
@@ -371,6 +498,7 @@ EMSCRIPTEN_KEEPALIVE
 void destroyAll()
 {
     for (MasterScore* score : s_instances) {
+        sve::ScoreViews::forget(score);
         try {
             delete score;
         } catch (...) {

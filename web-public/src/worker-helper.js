@@ -177,11 +177,9 @@ class WebMscoreW {
     }
 
     /**
-     * Only save this excerpt (linked parts) of the score  
-     * 
-     * if no excerpts, generate excerpts from existing instrument parts
-     * 
-     * @param {number} id  `-1` means the full score 
+     * Select the view the page, position and metadata calls describe: `-1`
+     * the full score, `0 … n-1` an excerpt as `metadata().excerpts` lists them
+     * @param {number} id
      * @returns {Promise<void>}
      */
     setExcerptId(id) {
@@ -196,11 +194,31 @@ class WebMscoreW {
     }
 
     /**
-     * Generate excerpts from Parts (only parts that are visible) if no existing excerpts
-     * @returns {Promise<void>}
+     * Generate excerpts: one per part without arguments, or one holding
+     * exactly the given part ids
+     * @param {string[]} [partIds]
+     * @returns {Promise<number[]>} the ids of the new excerpts
      */
-    generateExcerpts() {
-        return this.rpc('generateExcerpts')
+    generateExcerpts(partIds = []) {
+        return this.rpc('generateExcerpts', [partIds])
+    }
+
+    /**
+     * Change how the selected view is engraved (page format, concert pitch,
+     * transposition) and lay it out again - see index.js
+     * @param {{format?: 'orig' | 'phone' | 'phonel', concertPitch?: boolean | null, transposeSemitones?: number}} options
+     * @returns {Promise<number>} the page count of the view
+     */
+    applyView(options = {}) {
+        return this.rpc('applyView', [options])
+    }
+
+    /**
+     * How the selected view maps onto the full score
+     * @returns {Promise<{baseElid: Record<string, number>, staffMap: number[]}>}
+     */
+    viewMapping() {
+        return this.rpc('viewMapping')
     }
 
     /**
@@ -357,8 +375,8 @@ class WebMscoreW {
      * @also `score.measurePositions()` and `score.segmentPositions()`
      * @returns {Promise<string>}
      */
-    savePositions(ofSegments) {
-        return this.rpc('savePositions', [ofSegments])
+    savePositions(ofSegments, measuresOfMain = false) {
+        return this.rpc('savePositions', [ofSegments, measuresOfMain])
     }
 
     /**

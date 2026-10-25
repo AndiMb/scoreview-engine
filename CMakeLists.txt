@@ -148,6 +148,7 @@ add_library(sve_engine STATIC
     src/shadow/exportmidi.cpp
     src/positions/positionswriter.cpp
     src/meta/scoremeta.cpp
+    src/view/scoreview.cpp
     src/svg/drawdatasvg.cpp
     src/svg/svgwriter.cpp
     ${MU_ROOT}/src/engraving/internal/engravingfont.cpp

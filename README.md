@@ -150,9 +150,44 @@ score.destroy()
 The `fonts` argument of `load()` (webmscore's CJK path) registers extra fonts
 as text-substitution fallbacks for glyphs the score fonts lack — woff2, otf,
 ttf and ttc alike. Audio,
-soundfonts, PNG/PDF, MusicXML, MSCZ writing and excerpts throw a
+soundfonts, PNG/PDF, MusicXML and MSCZ writing throw a
 `NotSupportedError`. `web-example/browser.html` is a smoke test for both
 browser bundles.
+
+### Views: parts, page format, pitch
+
+A loaded score can be engraved differently - still by MuseScore, only with
+other settings (`src/view/`). `metadata().excerpts` lists the parts the file
+stores; `setExcerptId(n)` selects one, `generateExcerpts([partId, ...])`
+makes one holding exactly those parts (without arguments one per part, as in
+webmscore). `applyView()` then changes the selected view and lays it out
+again:
+
+```js
+const score = await WebMscore.load('mscz', data)
+const [id] = await score.generateExcerpts(['3'])   // part ids from metadata().parts
+await score.setExcerptId(id)
+await score.applyView({ format: 'phone', concertPitch: null, transposeSemitones: -2 })
+await score.saveSvg(0)                    // the part, on a phone page, a tone lower
+await score.savePositions(false, true)    // measures numbered as the full score does
+await score.viewMapping()                 // {baseElid, staffMap}
+```
+
+`format` is `orig`, `phone` (105 × 186 mm) or `phonel` (landscape); the phone
+pages drop the file's line and page breaks (section breaks stay) and hide
+empty staves. `transposeSemitones` (-12 … 12) transposes by interval, spelled
+as MuseScore's dialog does (`src/view/intervalmap.h`); `concertPitch` true
+shows transposing instruments as they sound.
+
+A view keeps the full score's time axis - parts share the main score's
+repeat list and tempo map - and `savePositions(false, true)` its measure
+numbering: a part's multimeasure rest stands for every measure it covers.
+`viewMapping()` maps the view back: `baseElid` gives the full score's segment
+number at the same tick for every segment of the view, `staffMap` the full
+score's staff for every staff. MIDI stays the full score's; an excerpt's own
+MIDI throws `NotSupportedError`. `applyView()` edits the loaded score and is
+not undone - load again for another view. The native CLI takes the same as
+`--excerpt <n>`, `--part <ids>`, `--view <json>` and `--mapping`.
 
 ## Fidelity gates
 

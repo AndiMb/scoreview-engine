@@ -30,6 +30,7 @@
 #include "platform/cryptographichash.h"
 #include "platform/enginefilesystem.h"
 #include "svg/svgprimitives.h"
+#include "view/intervalmap.h"
 
 using muse::ByteArray;
 
@@ -594,6 +595,44 @@ static void testBase64()
     }
 }
 
+// The spelling a transposed view uses (src/view/intervalmap.h): indexes into
+// Interval::allIntervals, whose table is restated here as diatonic/chromatic
+// steps so a wrong index shows up as a wrong interval, not a wrong number.
+static void testIntervalMap()
+{
+    group("interval map");
+    // allIntervals[i] = {diatonic, chromatic}, MuseScore's table (interval.cpp)
+    static const int table[26][2] = {
+        { 0, 0 }, { 0, 1 }, { 1, 0 }, { 1, 1 }, { 1, 2 }, { 1, 3 }, { 2, 2 }, { 2, 3 }, { 2, 4 }, { 2, 5 },
+        { 3, 4 }, { 3, 5 }, { 3, 6 }, { 4, 6 }, { 4, 7 }, { 4, 8 }, { 5, 7 }, { 5, 8 }, { 5, 9 }, { 5, 10 },
+        { 6, 9 }, { 6, 10 }, { 6, 11 }, { 6, 12 }, { 7, 11 }, { 7, 12 },
+    };
+    // Every distance lands on an interval of exactly that many semitones, in
+    // both directions; the spellings themselves are pinned below.
+    for (int n = 1; n <= 12; ++n) {
+        for (int sign : { 1, -1 }) {
+            const int i = sve::intervalIndexFor(sign * n);
+            char what[64];
+            std::snprintf(what, sizeof(what), "%+d semitones has an index", sign * n);
+            CHECK_EQ(what, i >= 0 && i < 26, true);
+            if (i < 0 || i >= 26) {
+                continue;
+            }
+            std::snprintf(what, sizeof(what), "%+d semitones: chromatic steps", sign * n);
+            CHECK_EQ(what, table[i][1], n);
+        }
+    }
+    CHECK_EQ("whole tone is a major second", sve::intervalIndexFor(2), 4);
+    CHECK_EQ("whole tone down is a major second", sve::intervalIndexFor(-2), 4);
+    CHECK_EQ("five semitones are a perfect fourth", sve::intervalIndexFor(5), 11);
+    CHECK_EQ("tritone up is an augmented fourth", sve::intervalIndexFor(6), 12);
+    CHECK_EQ("tritone down is a diminished fifth", sve::intervalIndexFor(-6), 13);
+    CHECK_EQ("octave", sve::intervalIndexFor(12), 25);
+    CHECK_EQ("zero has none", sve::intervalIndexFor(0), -1);
+    CHECK_EQ("13 is out of range", sve::intervalIndexFor(13), -1);
+    CHECK_EQ("-13 is out of range", sve::intervalIndexFor(-13), -1);
+}
+
 int main()
 {
     std::printf("scoreview-engine unit tests\n");
@@ -604,6 +643,7 @@ int main()
     testFmt();
     testXmlEscape();
     testBase64();
+    testIntervalMap();
 
     std::printf("\n%d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;

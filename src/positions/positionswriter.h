@@ -25,7 +25,10 @@ public:
     explicit PositionsWriter(ElementType elementType)
         : m_elementType(elementType) {}
 
-    muse::ByteArray json(const mu::engraving::Score* score) const;
+    //! measureReference: for MEASURE, the score whose measure chain numbers
+    //! the elements and events (the main score, for a view); null = score.
+    muse::ByteArray json(const mu::engraving::Score* score,
+                         const mu::engraving::Score* measureReference = nullptr) const;
 
 private:
     ElementType m_elementType;

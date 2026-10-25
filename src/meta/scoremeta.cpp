@@ -13,6 +13,8 @@
 #include "engraving/dom/articulation.h"
 #include "engraving/dom/chord.h"
 #include "engraving/dom/chordrest.h"
+#include "engraving/dom/excerpt.h"
+#include "engraving/dom/instrument.h"
 #include "engraving/dom/keysig.h"
 #include "engraving/dom/lyrics.h"
 #include "engraving/dom/masterscore.h"
@@ -241,6 +243,26 @@ static std::pair<int, String> tempo(const Score* score)
     return { tempo, tempoText };
 }
 
+// Part::midiProgram() asks the main score for the part's playback channel
+// and dereferences the answer unchecked. For a part of an excerpt that
+// answer can be null - seen on a stored two-part excerpt, whose second part
+// MuseScore never mapped to a playback channel (it does not need one: parts
+// play through the main score). Fall back to the part's own channel, then 0.
+static int midiProgram(const Part* part)
+{
+    const Instrument* instrument = part->instrument();
+    if (!instrument) {
+        return 0;
+    }
+    if (const InstrChannel* playback = instrument->playbackChannel(0, part->masterScore())) {
+        return playback->program();
+    }
+    if (const InstrChannel* own = instrument->channel(0)) {
+        return own->program();
+    }
+    return 0;
+}
+
 static JsonArray partsJsonArray(const Score* score)
 {
     JsonArray jsonPartsArray;
@@ -256,11 +278,55 @@ static JsonArray partsJsonArray(const Score* score)
         jsonPart.set("isVisible", boolToString(part->show()));
         jsonPart.set("lyricCount", part->lyricCount());
         jsonPart.set("name", String(part->longName()).replace(u"\n", u""));
-        jsonPart.set("program", part->midiProgram());
+        jsonPart.set("program", midiProgram(part));
         jsonPartsArray.append(jsonPart);
     }
 
     return jsonPartsArray;
+}
+
+// The excerpts the file stores (and any generated since loading), in the
+// order the views address them (src/view/). "partIds" are the ids "parts"
+// uses, so a caller can tell which excerpt holds exactly the part it wants.
+static JsonArray excerptsJson(const Score* score)
+{
+    JsonArray list;
+    const MasterScore* master = score->masterScore();
+    if (score != master) {
+        return list;
+    }
+    int id = 0;
+    for (const Excerpt* excerpt : master->excerpts()) {
+        JsonObject e;
+        e.set("id", id++);
+        e.set("name", excerpt->name());
+        JsonArray partIds;
+        // From the excerpt's own parts: they carry the ids of the main
+        // score's parts they were made from (Excerpt::createExcerpt), and
+        // unlike Excerpt::parts() they are set for stored excerpts as well.
+        if (const Score* es = excerpt->excerptScore()) {
+            for (const Part* part : es->parts()) {
+                partIds.append(part->id().toStdString());
+            }
+        }
+        e.set("partIds", partIds);
+        list.append(e);
+    }
+    return list;
+}
+
+// Whether a "written / concert pitch" choice changes anything: some part
+// has an instrument, at any point, that does not sound as written.
+static bool hasTransposingParts(const Score* score)
+{
+    for (const Part* part : score->parts()) {
+        for (const auto& [tick, instrument] : part->instruments()) {
+            if (instrument && instrument->transpose().chromatic != 0) {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 static JsonObject pageFormatJson(const MStyle& style)
@@ -735,9 +801,11 @@ ByteArray ScoreMeta::json(Score* score)
 
     json.set("composer", composer(score));
     json.set("duration", score->duration());
+    json.set("excerpts", excerptsJson(score));
     json.set("fileVersion", score->mscVersion());
     json.set("hasHarmonies", boolToString(score->hasHarmonies()));
     json.set("hasLyrics", boolToString(score->hasLyrics()));
+    json.set("hasTransposingParts", hasTransposingParts(score));
     json.set("keySigs", keySigsJson(score, numbers));
     json.set("keysig", static_cast<int>(score->keysig()));
     if (syllablesComplete) {

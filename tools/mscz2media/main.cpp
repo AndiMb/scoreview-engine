@@ -6,11 +6,13 @@
 // writers, so the two produce the same bytes.
 
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "config/engravinginit.h"
 
@@ -30,6 +32,7 @@
 #include "positions/positionswriter.h"
 #include "shadow/exportmidi.h"
 #include "svg/svgwriter.h"
+#include "view/scoreview.h"
 
 using namespace muse;
 using namespace muse::draw;
@@ -47,7 +50,13 @@ static int usage()
                 "  --meta             write meta.json (score metadata; tracks always empty)\n"
                 "  --svg              write page-<n>.svg per page (text as glyph outlines)\n"
                 "  --drawdata         write page-<n>.drawdata.json per page (diagnostics)\n"
-                "  --dump-playback    print tempomap and expanded repeat list (diagnostics)\n");
+                "  --dump-playback    print tempomap and expanded repeat list (diagnostics)\n"
+                "\n"
+                "views (every output except --midi then describes the view):\n"
+                "  --excerpt <n>      a stored excerpt, 0-based as in meta.json \"excerpts\"\n"
+                "  --part <ids>       generate an excerpt of the given part ids (comma-separated)\n"
+                "  --view <json>      {\"format\":\"orig|phone|phonel\",\"concertPitch\":bool,\"transposeSemitones\":n}\n"
+                "  --mapping          write mapping.json (baseElid, staffMap) for the view\n");
     return 2;
 }
 
@@ -61,6 +70,10 @@ int main(int argc, char** argv)
     bool wantMeta = false;
     bool wantSvg = false;
     bool wantDumpPlayback = false;
+    bool wantMapping = false;
+    bool isView = false;
+    int excerptId = -1;
+    std::string partIds, viewJson;
 
     for (int i = 1; i < argc; ++i) {
         if (!std::strcmp(argv[i], "--resources") && i + 1 < argc) {
@@ -81,6 +94,17 @@ int main(int argc, char** argv)
             wantSvg = true;
         } else if (!std::strcmp(argv[i], "--dump-playback")) {
             wantDumpPlayback = true;
+        } else if (!std::strcmp(argv[i], "--excerpt") && i + 1 < argc) {
+            excerptId = std::atoi(argv[++i]);
+            isView = true;
+        } else if (!std::strcmp(argv[i], "--part") && i + 1 < argc) {
+            partIds = argv[++i];
+            isView = true;
+        } else if (!std::strcmp(argv[i], "--view") && i + 1 < argc) {
+            viewJson = argv[++i];
+            isView = true;
+        } else if (!std::strcmp(argv[i], "--mapping")) {
+            wantMapping = true;
         } else if (argv[i][0] == '-') {
             return usage();
         } else {
@@ -102,8 +126,45 @@ int main(int argc, char** argv)
         return 1;
     }
 
+    // The view every output below describes. MIDI stays the main score's:
+    // a view changes the picture, not the piece (see src/view/).
+    MasterScore* master = score;
+    Score* view = master;
+    if (isView) {
+        muse::String error;
+        sve::ScoreViews::captureBase(master);
+        if (!partIds.empty()) {
+            std::vector<std::string> ids;
+            size_t from = 0;
+            for (;;) {
+                const size_t comma = partIds.find(',', from);
+                ids.push_back(partIds.substr(from, comma == std::string::npos ? std::string::npos : comma - from));
+                if (comma == std::string::npos) {
+                    break;
+                }
+                from = comma + 1;
+            }
+            excerptId = sve::ScoreViews::generateExcerpt(master, ids, &error);
+            if (excerptId < 0) {
+                std::fprintf(stderr, "mscz2media: %s\n", error.toStdString().c_str());
+                return 1;
+            }
+        }
+        view = sve::ScoreViews::score(master, excerptId);
+        if (!view) {
+            std::fprintf(stderr, "mscz2media: no excerpt %d\n", excerptId);
+            return 1;
+        }
+        sve::ViewOptions options;
+        if (!sve::ScoreViews::parseOptions(viewJson, options, &error)
+            || !sve::ScoreViews::apply(view, options, &error)) {
+            std::fprintf(stderr, "mscz2media: %s\n", error.toStdString().c_str());
+            return 1;
+        }
+    }
+
     std::printf("pages=%zu measures=%zu tracks=%zu\n",
-                score->npages(), score->nmeasures(), score->ntracks());
+                view->npages(), view->nmeasures(), view->ntracks());
 
     if (wantDumpPlayback) {
         std::printf("tempomap (multiplier=%f):\n", score->tempomap()->tempoMultiplier().val);
@@ -118,7 +179,7 @@ int main(int argc, char** argv)
         }
     }
 
-    if (wantDrawData || wantMidi || wantSpos || wantMpos || wantMeta || wantSvg) {
+    if (wantDrawData || wantMidi || wantSpos || wantMpos || wantMeta || wantSvg || wantMapping) {
         std::filesystem::create_directories(outDir);
     }
 
@@ -135,8 +196,8 @@ int main(int argc, char** argv)
     };
 
     if (wantSvg) {
-        for (size_t pageNo = 0; pageNo < score->npages(); ++pageNo) {
-            muse::ByteArray svg = sve::SvgWriter::write(score, pageNo);
+        for (size_t pageNo = 0; pageNo < view->npages(); ++pageNo) {
+            muse::ByteArray svg = sve::SvgWriter::write(view, pageNo);
             if (svg.empty()) {
                 std::fprintf(stderr, "mscz2media: no SVG for page %zu\n", pageNo + 1);
                 return 1;
@@ -148,19 +209,19 @@ int main(int argc, char** argv)
     }
 
     if (wantMeta) {
-        if (!writeBytes("meta.json", sve::ScoreMeta::json(score))) {
+        if (!writeBytes("meta.json", sve::ScoreMeta::json(view))) {
             return 1;
         }
     }
     if (wantSpos) {
         sve::PositionsWriter writer(sve::PositionsWriter::ElementType::SEGMENT);
-        if (!writeBytes("spos.json", writer.json(score))) {
+        if (!writeBytes("spos.json", writer.json(view))) {
             return 1;
         }
     }
     if (wantMpos) {
         sve::PositionsWriter writer(sve::PositionsWriter::ElementType::MEASURE);
-        if (!writeBytes("mpos.json", writer.json(score))) {
+        if (!writeBytes("mpos.json", writer.json(view, isView ? master : nullptr))) {
             return 1;
         }
     }
@@ -181,8 +242,14 @@ int main(int argc, char** argv)
         }
     }
 
+    if (wantMapping) {
+        if (!writeBytes("mapping.json", sve::ScoreViews::mapping(master, view))) {
+            return 1;
+        }
+    }
+
     if (wantDrawData) {
-        for (size_t pageNo = 0; pageNo < score->npages(); ++pageNo) {
+        for (size_t pageNo = 0; pageNo < view->npages(); ++pageNo) {
             auto provider = std::make_shared<BufferedPaintProvider>();
             {
                 Painter painter(provider, "mscz2media");
@@ -192,7 +259,7 @@ int main(int argc, char** argv)
                 opt.fromPage = static_cast<int>(pageNo);
                 opt.toPage = static_cast<int>(pageNo);
                 opt.printPageBackground = false;
-                renderer.paintScore(&painter, score, opt);
+                renderer.paintScore(&painter, view, opt);
                 painter.endDraw();
             }
             DrawDataPtr dd = provider->drawData();

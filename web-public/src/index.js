@@ -1,10 +1,11 @@
 // @ts-check
 
 // scoreview-engine: the Qt-free successor of webmscore, API-compatible for
-// the supported surface (SVG, MIDI, positions, metadata). Everything the Qt
-// build provided through Qt — audio synthesis, soundfonts, PNG/PDF,
-// MusicXML, MSCZ writing, excerpts, extra fonts — throws a NotSupportedError
-// here, so a consumer migrating from webmscore fails loudly, not silently.
+// the supported surface (SVG, MIDI, positions, metadata, excerpts) and
+// extended by views (applyView, viewMapping). Everything the Qt build
+// provided through Qt — audio synthesis, soundfonts, PNG/PDF, MusicXML,
+// MSCZ writing — throws a NotSupportedError here, so a consumer migrating
+// from webmscore fails loudly, not silently.
 
 import {
     Module,
@@ -291,12 +292,15 @@ class WebMscore {
     }
 
     /**
-     * Only the full score is supported: `-1` passes, anything else throws
+     * Select the view the page, position and metadata calls describe:
+     * `-1` is the full score, `0 … n-1` an excerpt in the order
+     * `metadata().excerpts` lists them (stored ones first, generated ones
+     * appended). An id with no excerpt behind it fails on first use.
      * @param {number} id
      */
     async setExcerptId(id) {
-        if (id !== -1) {
-            throw new NotSupportedError('excerpts')
+        if (!Number.isInteger(id) || id < -1) {
+            throw new RangeError(`excerpt id must be -1 or a non-negative integer, got ${id}`)
         }
         this.excerptId = id
     }
@@ -305,9 +309,58 @@ class WebMscore {
         return this.excerptId
     }
 
-    /** NOT SUPPORTED */
-    async generateExcerpts() {
-        throw new NotSupportedError('excerpts')
+    /**
+     * Generate excerpts. Without arguments one per part, as webmscore did;
+     * with part ids (the `id`s of `metadata().parts`) one excerpt holding
+     * exactly those parts.
+     * @param {string[]} [partIds]
+     * @returns {Promise<number[]>} the ids of the new excerpts
+     */
+    async generateExcerpts(partIds = []) {
+        this._checkAlive()
+        const idsptr = getStrPtr(JSON.stringify(partIds.map(String)))
+        try {
+            const dataptr = Module.ccall('generateExcerpts', 'number', ['number', 'number'], [this.scoreptr, idsptr])
+            return JSON.parse(WasmRes.readText(dataptr))
+        } finally {
+            freePtr(idsptr)
+        }
+    }
+
+    /**
+     * Change how the selected view is engraved and lay it out again:
+     * `format` 'orig' | 'phone' | 'phonel' (a phone-sized page, portrait or
+     * landscape, without the file's line and page breaks), `concertPitch`
+     * true/false (null: as the file says), `transposeSemitones` -12 … 12.
+     *
+     * These are edits of the loaded score and are not taken back: load the
+     * score again for another view. MIDI stays the full score's.
+     * @param {{format?: 'orig' | 'phone' | 'phonel', concertPitch?: boolean | null, transposeSemitones?: number}} options
+     * @returns {Promise<number>} the page count of the view
+     */
+    async applyView(options = {}) {
+        this._checkAlive()
+        const optsptr = getStrPtr(JSON.stringify(options))
+        try {
+            const dataptr = Module.ccall('applyView', 'number', ['number', 'number', 'number'],
+                [this.scoreptr, this.excerptId, optsptr])
+            return WasmRes.readNum(dataptr)
+        } finally {
+            freePtr(optsptr)
+        }
+    }
+
+    /**
+     * How the selected view maps onto the full score: `baseElid` gives, for
+     * every segment number of the view, the full score's segment number at
+     * the same tick; `staffMap` the full score's staff index for every staff
+     * of the view.
+     * @returns {Promise<{baseElid: Record<string, number>, staffMap: number[]}>}
+     */
+    async viewMapping() {
+        this._checkAlive()
+        const dataptr = Module.ccall('viewMapping', 'number', ['number', 'number'], [this.scoreptr, this.excerptId])
+        return JSON.parse(WasmRes.readText(dataptr))
     }
 
     /**
@@ -470,13 +523,19 @@ class WebMscore {
      * Positions are layout data: this throws for a score loaded with
      * `doLayout: false`, which has none.
      *
+     * `measuresOfMain`: number the measures (and their events) as the full
+     * score does, each taking the box of whatever the selected view draws at
+     * that tick - a part's multimeasure rest stands for every measure it
+     * covers. That keeps one measure numbering across all views of a score.
+     *
      * @param {boolean} ofSegments
+     * @param {boolean} [measuresOfMain]
      * @also `score.measurePositions()` and `score.segmentPositions()`
      * @returns {Promise<string>}
      */
-    async savePositions(ofSegments) {
+    async savePositions(ofSegments, measuresOfMain = false) {
         this._checkAlive()
-        const dataptr = Module.ccall('savePositions',
+        const dataptr = Module.ccall(measuresOfMain ? 'saveViewPositions' : 'savePositions',
             'number',
             ['number', 'boolean', 'number'],
             [this.scoreptr, ofSegments, this.excerptId]
@@ -485,13 +544,15 @@ class WebMscore {
     }
 
     /**
-     * Export score metadata as JSON text
+     * Export metadata of the selected view as JSON text
      * @also `score.metadata()`
      * @returns {Promise<string>} contents of the JSON file
      */
     async saveMetadata() {
         this._checkAlive()
-        const dataptr = Module.ccall('saveMetadata', 'number', ['number'], [this.scoreptr])
+        const dataptr = this.excerptId === -1
+            ? Module.ccall('saveMetadata', 'number', ['number'], [this.scoreptr])
+            : Module.ccall('saveViewMetadata', 'number', ['number', 'number'], [this.scoreptr, this.excerptId])
         return WasmRes.readText(dataptr)
     }
 

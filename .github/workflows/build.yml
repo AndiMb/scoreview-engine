@@ -92,7 +92,8 @@ jobs:
       # so the metadata track list is always empty. "title" is absent from
       # the baseline, which stripped it as volatile; native and wasm compare
       # it exactly in the job below. "keySigs", "rehearsalMarks",
-      # "lyricSyllables" and "noteSpellings" are this engine's own additions
+      # "lyricSyllables", "noteSpellings", "measureFacts", "excerpts" and
+      # "hasTransposingParts" are this engine's own additions
       # (src/meta/scoremeta.cpp), so the baseline cannot carry them either;
       # native and wasm compare them below.
       - name: Corpus
@@ -103,7 +104,7 @@ jobs:
             --allow-meta tracks --allow-meta title \
             --allow-meta keySigs --allow-meta rehearsalMarks \
             --allow-meta lyricSyllables --allow-meta noteSpellings \
-            --allow-meta measureFacts \
+            --allow-meta measureFacts             --allow-meta excerpts --allow-meta hasTransposingParts \
             --waivers testdata/corpus-waivers.json
 
       - name: Upload native corpus report

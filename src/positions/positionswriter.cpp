@@ -117,18 +117,28 @@ static void writeSegmentsPositions(JsonObject& json, const Score* score)
     json.set("elements", elements);
 }
 
-static void writeMeasuresPositions(JsonObject& json, const Score* score)
+// `reference` numbers the measures, `score` draws them. Normally the same
+// score. For a view (a part, another page format) the reference is the main
+// score: the view's measures are then numbered as the main score numbers
+// them, and each takes the box of whatever the view draws at that tick - a
+// part's multimeasure rest covers all the measures it stands for. That keeps
+// one measure numbering across every view of a score (see src/view/).
+static void writeMeasuresPositions(JsonObject& json, const Score* score, const Score* reference)
 {
     int id = 0;
 
     JsonArray elements;
 
-    for (Measure* measure = score->firstMeasureMM(); measure; measure = measure->nextMeasureMM()) {
+    for (Measure* refMeasure = reference->firstMeasureMM(); refMeasure; refMeasure = refMeasure->nextMeasureMM()) {
         // Consume the number even when the measure is skipped: writeEvents-
         // Positions numbers the same chain unconditionally, and the two sides
         // have to keep agreeing on which measure is which.
         const int elementId = id++;
 
+        const Measure* measure = reference == score ? refMeasure : score->tick2measureMM(refMeasure->tick());
+        if (!measure) {
+            continue;
+        }
         const System* system = measure->system();
         if (!system) {
             continue;
@@ -197,7 +207,7 @@ static void writeEventsPositions(JsonObject& json, MasterScore* master, const Sc
     json.set("events", events);
 }
 
-ByteArray PositionsWriter::json(const Score* score) const
+ByteArray PositionsWriter::json(const Score* score, const Score* measureReference) const
 {
     // Positions are layout data: every geometry read below goes through
     // System*, which does not exist before doLayout(), and writePageSize wants
@@ -209,13 +219,17 @@ ByteArray PositionsWriter::json(const Score* score) const
         return ByteArray();
     }
 
+    // Segments are always the view's own: the SVG of the view carries their
+    // numbers. Measures follow the reference, events with them.
+    const Score* reference = (m_elementType == ElementType::MEASURE && measureReference) ? measureReference : score;
+
     JsonObject json;
     if (m_elementType == ElementType::SEGMENT) {
         writeSegmentsPositions(json, score);
     } else {
-        writeMeasuresPositions(json, score);
+        writeMeasuresPositions(json, score, reference);
     }
-    writeEventsPositions(json, score->masterScore(), score, m_elementType);
+    writeEventsPositions(json, score->masterScore(), reference, m_elementType);
     writePageSize(json, score);
 
     return JsonDocument(json).toJson(JsonDocument::Format::Compact);
