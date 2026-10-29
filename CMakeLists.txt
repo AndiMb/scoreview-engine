@@ -71,7 +71,7 @@ set(FT_DISABLE_BROTLI FALSE)
 set(FT_REQUIRE_BROTLI TRUE)   # cmake/FindBrotliDec.cmake answers this; a miss must fail loudly
 set(SKIP_INSTALL_ALL TRUE)
 
-set(FREETYPE_DIR ${CMAKE_CURRENT_LIST_DIR}/thirdparty/freetype/freetype-2.14.3)
+set(FREETYPE_DIR ${CMAKE_CURRENT_LIST_DIR}/thirdparty/freetype/freetype-2.15.0)
 add_subdirectory(${FREETYPE_DIR} freetype)
 if(COMMAND target_no_warning)
     target_no_warning(freetype -Wno-conversion)

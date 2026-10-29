@@ -1,4 +1,4 @@
-# Brotli decoder (google/brotli 1.2.0, MIT), vendored for FreeType's woff2
+# Brotli decoder (google/brotli 1.2.1, MIT), vendored for FreeType's woff2
 # support: woff2 stores its font tables brotli-compressed, so without this
 # FT_New_Face refuses every .woff2 — the resource pack and every font handed
 # to addFont() would have to be otf/ttf.
@@ -9,7 +9,7 @@
 # Answered to FreeType through cmake/FindBrotliDec.cmake, which stands in for
 # the system libbrotlidec that no Emscripten sysroot has.
 
-set(BROTLI_DIR ${CMAKE_CURRENT_LIST_DIR}/brotli-1.2.0)
+set(BROTLI_DIR ${CMAKE_CURRENT_LIST_DIR}/brotli-1.2.1)
 
 add_library(brotlidec STATIC
     ${BROTLI_DIR}/c/common/constants.c

@@ -21,26 +21,36 @@ top-level `CMakeLists.txt` has always configured FreeType itself. Only
 ## What is here
 
 Upstream: [freetype/freetype](https://gitlab.freedesktop.org/freetype/freetype),
-release **2.14.3** (2026-03-22), from the official tarball
-`freetype-2.14.3.tar.xz`, SHA-256
-`36bc4f1cc413335368ee656c42afca65c5a3987e8768cc28cf11ba775e785a5f`.
+release **2.15.0** (2026-10-12), from the official tarball
+`freetype-2.15.0.tar.xz`, SHA-256
+`93cd47eb719c325107f2d3cf087d06299e944c3b48a40b55537302304dea1dd5`.
 
 The tarball is signed. Its OpenPGP signature verifies against
 `E306 7470 7856 409F F194 8010 BE6C 3AAC 63AD 8E3F`, "Werner Lemberg
-<wl@gnu.org>" — the same key that signed 2.14.1, the release this copy
-replaces.
+<wl@gnu.org>" — the same key that signed 2.14.1 and 2.14.3, the releases
+this copy replaced.
 
 Unmodified, and complete except for two generated documentation directories
 that only add weight to the repository:
 
-* `docs/reference/` — 6.7 MB of generated HTML API docs,
+* `docs/reference/` — 6.9 MB of generated HTML API docs,
 * `docs/oldlogs/` — 1.8 MB of historical changelogs.
 
 Nothing else is removed, so everything present is byte-identical to the signed
 tarball. `docs/CHANGES`, `LICENSE.TXT`, `docs/FTL.TXT` and `docs/GPLv2.TXT`
 are kept.
 
-## Why 2.14.3
+## Why 2.15.0
+
+A feature release, taken for its security fixes: `docs/CHANGES` lists "more
+bugs being fixed, some with potential security implications (e.g.,
+CVE-2026-95512)", found by scrutinizing FreeType with AI tools. The features
+it adds come along with it — ISO OFF edition 5 tables (`VARC`, the uppercase
+tables for more than 65536 glyphs, mixed cubic/conic `GLYF` outlines), heap
+memory in the anti-aliased rasterizer for large glyphs, ClearType work in the
+v40 TrueType interpreter, and an HVF driver that builds on macOS only.
+
+## Why 2.14.3, before it
 
 2.14.1 is affected by nine CVEs fixed in 2.14.2 and 2.14.3 — out-of-bounds
 reads and information disclosure while parsing fonts: CVE-2026-22007,
@@ -77,9 +87,13 @@ output.** It goes through the corpus gate like any other engraving change; see
 2.14.1 → 2.14.3 move was measured over all 569 vtest scores and left every
 fingerprint — MIDI, positions, metadata and SVG — bit-identical; the release's
 rendering changes are in LCD filtering, which this build does not use.
+2.14.3 → 2.15.0 (together with brotli 1.2.1) was measured the same way over
+all 570 and came out bit-identical as well. That covers the resource fonts
+and what the vtest scores ask for; a caller's `addFont()` font that uses the
+new OFF tables or TrueType hinting could still render differently.
 
 ## License
 
 FreeType is dual-licensed under the FreeType License (BSD-style with credit
 clause) and GPLv2. This project uses it under the FreeType License; see
-`freetype-2.14.3/LICENSE.TXT` and `freetype-2.14.3/docs/FTL.TXT`.
+`freetype-2.15.0/LICENSE.TXT` and `freetype-2.15.0/docs/FTL.TXT`.

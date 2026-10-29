@@ -34,7 +34,7 @@
     },
     {
       "name": "freetype",
-      "version": "2.14.3",
+      "version": "2.15.0",
       "kind": "vendored",
       "location": "thirdparty/freetype",
       "verify": {
@@ -83,7 +83,7 @@
     },
     {
       "name": "brotli",
-      "version": "1.2.0",
+      "version": "1.2.1",
       "kind": "vendored",
       "location": "thirdparty/brotli",
       "verify": {

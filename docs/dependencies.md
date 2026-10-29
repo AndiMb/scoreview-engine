@@ -12,9 +12,9 @@ Native, and therefore part of the shipped wasm:
 | | In use | Where the version lives | How it moves |
 |---|---|---|---|
 | MuseScore | 4.7.5 | `musescore` submodule | watched daily; mechanical bump automated, corpus gate + shadow copies by hand |
-| FreeType | 2.14.3 | `thirdparty/freetype/` | vendored, ours to bump |
+| FreeType | 2.15.0 | `thirdparty/freetype/` | vendored, ours to bump |
 | HarfBuzz | 12.3.0 | `SetupHarfBuzz.cmake` (submodule) | MuseScore's muse_deps channel |
-| brotli | 1.2.0 | `thirdparty/brotli/` | vendored, ours to bump |
+| brotli | 1.2.1 | `thirdparty/brotli/` | vendored, ours to bump |
 | zlib | 1.3.2 | emscripten port, follows the emsdk pin | only via an emsdk bump |
 | msdfgen | 1.4 (MuseScore fork) | `thirdparty/msdfgen/` | frozen on purpose |
 
@@ -124,7 +124,8 @@ signature check in the README next to each. FreeType changes glyph outlines and
 metrics, so a bump goes through the corpus gate; 2.14.1 → 2.14.3 was measured
 over all 569 vtest scores and the fingerprints came out byte-identical (the
 release's rendering changes are in LCD filtering, which this build does not
-use).
+use). 2.14.3 → 2.15.0, taken together with brotli 1.2.0 → 1.2.1 on
+2026-10-29, left all 570 fingerprints bit-identical too, SVG included.
 
 **HarfBuzz** — comes from `musescore/muse_deps@legacy`, which currently offers
 only 12.3.0 and 7.1.0, so 12.3.0 *is* current for the channel. Going past it
