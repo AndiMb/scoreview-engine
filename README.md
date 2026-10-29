@@ -5,7 +5,7 @@ engine for [ScoreView](https://github.com/AndiMb/scoreview). Takes `.mscz`
 files and produces SVG pages, MIDI, playback positions (spos/mpos) and
 metadata JSON. No Qt, no audio synthesis, no UI.
 
-Releases are npm tarballs attached to GitHub Releases (`v4.7.5-engine.N`),
+Releases are npm tarballs attached to GitHub Releases (`v4.7.6-engine.N`),
 API-compatible with [webmscore](https://github.com/LibreScore/webmscore) for
 the surface they support; ScoreView's server-side `local` conversion backend runs
 on them. Every release comes out of a CI run whose corpus gate passed: all
@@ -22,7 +22,7 @@ with a forced prelude header, or shadow-copied into `src/shadow/` with a
 documented diff. CI diffs every shadow copy against the submodule and fails
 when upstream drifts.
 
-    ├── musescore/            # submodule, pinned to an upstream release tag (v4.7.5)
+    ├── musescore/            # submodule, pinned to an upstream release tag (v4.7.6)
     ├── src/
     │   ├── platform/         # IFileSystem, MD4 - the muse_global interfaces Qt owned
     │   ├── config/           # IEngravingConfiguration, fonts init
@@ -35,7 +35,7 @@ when upstream drifts.
     ├── resources/            # fonts (woff2), SMuFL metadata, styles (replaces the qrc)
     ├── web/                  # wasm entry (C ABI + WasmRes wire format)
     ├── web-public/           # JS wrapper (webmscore-compatible subset, no audio)
-    ├── testdata/             # corpus baseline and waivers, two test scores
+    ├── testdata/             # corpus baseline and waivers, three test scores
     ├── tests/                # unit tests for the pure functions
     └── tools/                # mscz2media CLI, build scripts, corpus gates
 

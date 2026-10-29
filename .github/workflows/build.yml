@@ -86,6 +86,23 @@ jobs:
           grep -q 'xlink:href="data:image/png;base64,' build/out-images/page-1.svg
           grep -q 'xlink:href="data:image/jpeg;base64,' build/out-images/page-1.svg
 
+      # No vtest score has a volta whose endings all lie beyond the exhausted
+      # repeats, and up to MuseScore 4.7.5 the repeat list stopped at one:
+      # measures 1;2;1 played, 3 to 5 dropped from MIDI and mpos, and every
+      # gate stayed green. This is upstream's repeat70.mscx, verbatim; the
+      # measure order is read back from mpos, so the next bump that changes
+      # it fails here instead of in the player.
+      - name: Convert test score with a volta after the repeats
+        run: |
+          build/mscz2media testdata/volta-after-repeats.mscx --resources resources --out build/out-volta --mpos --midi
+          python3 -c '
+          import json
+          events = json.load(open("build/out-volta/mpos.json"))["events"]
+          order = ";".join(str(e["elid"] + 1) for e in events)
+          print(order)
+          assert order == "1;2;1;3;4;5", order
+          '
+
       # The corpus gate: fingerprints of MIDI, spos/mpos and metadata for all
       # vtest scores must match the released Qt webmscore (baseline in
       # testdata/). "tracks" is allowed to differ — this build has no audio,
