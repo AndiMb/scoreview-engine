@@ -35,7 +35,7 @@ when upstream drifts.
     ├── resources/            # fonts (woff2), SMuFL metadata, styles (replaces the qrc)
     ├── web/                  # wasm entry (C ABI + WasmRes wire format)
     ├── web-public/           # JS wrapper (webmscore-compatible subset, no audio)
-    ├── testdata/             # corpus baseline and waivers, two test scores
+    ├── testdata/             # corpus baseline and waivers, three test scores
     ├── tests/                # unit tests for the pure functions
     └── tools/                # mscz2media CLI, build scripts, corpus gates
 
