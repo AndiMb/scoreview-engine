@@ -22,7 +22,7 @@ Toolchain and CI:
 
 | | In use | Where |
 |---|---|---|
-| emsdk / Emscripten | 6.0.9 | `build.yml`, `tools/build-wasm-docker.sh` — tag and image digest |
+| emsdk / Emscripten | 6.0.13 | `build.yml`, `tools/build-wasm-docker.sh` — tag and image digest |
 | Ubuntu | 24.04 | `build.yml`, `Dockerfile` |
 | g++ | 10 | `Dockerfile` |
 | Node | 22 (supported to 2027-04-30) | `build.yml`; package declares `engines: >=18` |
@@ -149,8 +149,16 @@ port ships, today 1.3.2 (the release carrying the 7ASecurity audit fixes); the
 native CLI links the distro package and gets distro security updates. The only
 route to a newer zlib is an emsdk bump.
 
-**emsdk** — 6.0.9 since 2026-09-14, and the reason zlib is current. That last
-step was a patch: emscripten 6.0.9 marks `WASM_BINDGEN` experimental and gives
+**emsdk** — 6.0.13 since 2026-10-30. Four patch releases in one step, and
+none of them reached this build: 6.0.11 and 6.0.13 removed `FS.findObject`
+and `FS.filesystems` (and deprecated `FS.analyzePath`), which nothing here
+calls; the rest is embind, SDL3, MEMORY64, wasm2js and launcher work. The
+zlib port stayed 1.3.2 with the same hash. The wasm gate fired the same
+eleven waivers on the same eleven scores, byte counts identical to the
+6.0.9 run — the float noise did not move.
+
+6.0.9 came on 2026-09-14, and is the reason zlib is current. That step was
+a patch: emscripten 6.0.9 marks `WASM_BINDGEN` experimental and gives
 `-sCROSS_ORIGIN_STORAGE` its streaming path back, and this build sets neither.
 zlib did not move with it — the port file names 1.3.2 with the same hash under
 both. The bump was therefore a pin change and a wasm gate run, and the gate
