@@ -126,7 +126,7 @@ replaces MuseScore's qrc tree (fonts, SMuFL metadata, styles); see
 
 ## Building (wasm + JS wrapper)
 
-    tools/build-wasm-docker.sh    # emscripten/emsdk:6.0.9, volume sve-build-wasm
+    tools/build-wasm-docker.sh    # emscripten/emsdk:6.0.13, volume sve-build-wasm
     cd web-public && npm ci && npm run build
 
 Outputs `scoreview.lib.js` / `.wasm` / `.data` (preloaded resources,
