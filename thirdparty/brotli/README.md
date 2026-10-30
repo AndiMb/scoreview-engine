@@ -8,9 +8,15 @@ through `cmake/FindBrotliDec.cmake`.
 
 ## What is here
 
-Upstream: [google/brotli](https://github.com/google/brotli), tag **v1.2.0**,
+Upstream: [google/brotli](https://github.com/google/brotli), tag **v1.2.1**,
 release tarball SHA-256
-`816c96e8e8f193b40151dad7e8ff37b1221d019dbcb9c35cd3fadbfe6477dfec`.
+`98d35d11a78dc453aebb7d10c3748f3f73ff78c8267c0dc697b8631f67bf7e8f`.
+
+1.2.1 is a security release: CVE-2026-111497, an out-of-bounds write in the
+decoder (`c/dec/decode.c`, the block-switch path) that its changelog rates as
+remote code execution. That is the part vendored here, and it decodes the
+tables of every woff2 font, including the ones `addFont()` callers supply.
+The file list is unchanged from 1.2.0.
 
 Unmodified, but not complete: only `c/common`, `c/dec` and the public headers
 (minus `encode.h`) are kept. The encoder, the tools, the tests and the
@@ -35,4 +41,4 @@ that produces every glyph.
 
 ## License
 
-MIT, see `brotli-1.2.0/LICENSE`.
+MIT, see `brotli-1.2.1/LICENSE`.
