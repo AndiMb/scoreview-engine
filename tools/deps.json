@@ -176,7 +176,7 @@
     },
     {
       "name": "node",
-      "version": "22",
+      "version": "26",
       "kind": "ci-runtime",
       "location": ".github/workflows/build.yml",
       "verify": {
@@ -186,7 +186,7 @@
       },
       "watch": {
         "rule": "nodejs-lts",
-        "major": "22"
+        "major": "26"
       },
       "note": "The package declares engines >=18; ScoreView runs the wasm under Node. Watched by end of support, not by 'a newer major exists' — there always is one, and moving majors for its own sake buys nothing here."
     },
