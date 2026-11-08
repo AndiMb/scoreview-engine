@@ -25,7 +25,7 @@ Toolchain and CI:
 | emsdk / Emscripten | 6.0.13 | `build.yml`, `tools/build-wasm-docker.sh` — tag and image digest |
 | Ubuntu | 24.04 | `build.yml`, `Dockerfile` |
 | g++ | 10 | `Dockerfile` |
-| Node | 22 (supported to 2027-04-30) | `build.yml`; package declares `engines: >=18` |
+| Node | 26 (supported to 2029-04-30) | `build.yml`; package declares `engines: >=18` |
 
 Build-time npm packages (`web-public`, none of them shipped — the wrapper is
 published as bundles) and the workflow's actions are covered by Dependabot:
