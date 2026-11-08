@@ -142,14 +142,22 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.check.outputs.version }}
           BRANCH: ${{ steps.tag.outputs.branch }}
+          OWNER: ${{ github.repository_owner }}
         run: |
           branch="$BRANCH"
           title="MuseScore $VERSION is out"
 
+          # Only what this workflow itself filed counts. Anyone can open a PR
+          # from a fork branch named musescore/<version>, or an issue with the
+          # expected title; without these filters either would make the bot
+          # stand down, or treat a stranger's PR as its own (issue #42).
+          ours='[.[] | select(.headRepositoryOwner.login == $ENV.OWNER and .author.login == "app/github-actions")]'
+
           # Closing a proposal without merging it is an answer, and the bot
           # should not argue with it the next day. Merged means the bump has
           # landed, and this job will stop finding a release to bump to anyway.
-          state=$(gh pr list --head "$branch" --state all --json state --jq '.[0].state // empty')
+          state=$(gh pr list --head "$branch" --state all --json state,author,headRepositoryOwner \
+                    --jq "$ours | .[0].state // empty")
           if [ "$state" = "CLOSED" ] || [ "$state" = "MERGED" ]; then
             echo "the pull request for $branch is $state - leaving it alone"
             echo "act=no" >> "$GITHUB_OUTPUT"
@@ -158,7 +166,8 @@ jobs:
 
           # No --label filter: the label is created by the run that files the
           # first issue, and asking for one that does not exist yet is an error.
-          if gh issue list --state all --limit 200 --json title --jq '.[].title' \
+          if gh issue list --state all --limit 200 --json title,author \
+               --jq '.[] | select(.author.login == "app/github-actions") | .title' \
                | grep -Fxq "$title"; then
             echo "\"$title\" has already been filed"
             echo "act=no" >> "$GITHUB_OUTPUT"
@@ -172,7 +181,8 @@ jobs:
           else
             echo "branch_exists=no" >> "$GITHUB_OUTPUT"
           fi
-          echo "pr=$(gh pr list --head "$branch" --state open --json url --jq '.[0].url // empty')" >> "$GITHUB_OUTPUT"
+          echo "pr=$(gh pr list --head "$branch" --state open --json url,author,headRepositoryOwner \
+                       --jq "$ours | .[0].url // empty")" >> "$GITHUB_OUTPUT"
 
       - name: Bump the mechanical files
         if: steps.gate.outputs.act == 'yes' && steps.gate.outputs.branch_exists == 'no'

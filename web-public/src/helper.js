@@ -211,10 +211,52 @@ export const freePtr = (bufPtr) => {
 }
 
 /**
+ * Thrown by every engine call once the module has trapped or aborted.
+ */
+export class EngineAbortedError extends Error {
+    /**
+     * @param {string} cause message of the WebAssembly.RuntimeError that ended the module
+     */
+    constructor(cause) {
+        super(`scoreview-engine: the engine module aborted (${cause}) and cannot be used any more; load the score into a new instance or worker`)
+        this.name = 'EngineAbortedError'
+    }
+}
+
+/**
+ * A WebAssembly.RuntimeError out of a call is a trap or an abort(): the call
+ * never returned, its stack was never restored and whatever it held was never
+ * released, so the module is in a state nothing vouches for. Every later call
+ * fails fast instead of running on it (issue #32). Wraps Module.ccall, which
+ * every engine call in index.js goes through.
+ * @param {Record<string, any>} mod
+ */
+const poisonOnTrap = (mod) => {
+    const ccall = mod.ccall
+    /** @type {string | null} */
+    let poisoned = null
+    mod.ccall = (...args) => {
+        if (poisoned !== null) {
+            throw new EngineAbortedError(poisoned)
+        }
+        try {
+            return ccall(...args)
+        } catch (e) {
+            if (e instanceof WebAssembly.RuntimeError) {
+                poisoned = e.message
+                throw new EngineAbortedError(poisoned)
+            }
+            throw e
+        }
+    }
+}
+
+/**
  * this promise is resolved when the runtime is fully initialized
  */
 export const RuntimeInitialized = ModulePromise.then((_Module) => {
     Module = _Module
+    poisonOnTrap(Module)
     // init() answers false when the engine could not be set up (a missing or
     // unreadable resource pack). Rejecting is the only way a caller hears
     // about it: this used to resolve regardless, so every later call ran

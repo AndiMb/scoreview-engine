@@ -33,6 +33,9 @@ jobs:
       - name: Dependency manifest
         run: python3 tools/check-deps.py --verify
 
+      - name: check-deps.py unit tests
+        run: python3 tools/test_check_deps.py
+
       - name: Install toolchain
         run: |
           sudo apt-get update
