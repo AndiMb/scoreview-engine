@@ -120,9 +120,10 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    MasterScore* score = sve::loadScore(muse::io::path_t(scorePath));
+    std::string loadError;
+    MasterScore* score = sve::loadScore(muse::io::path_t(scorePath), true, &loadError);
     if (!score) {
-        std::fprintf(stderr, "mscz2media: failed to read %s\n", scorePath.c_str());
+        std::fprintf(stderr, "mscz2media: failed to read %s: %s\n", scorePath.c_str(), loadError.c_str());
         return 1;
     }
 
@@ -144,7 +145,8 @@ int main(int argc, char** argv)
                 }
                 from = comma + 1;
             }
-            excerptId = sve::ScoreViews::generateExcerpt(master, ids, &error);
+            const std::vector<int> made = sve::ScoreViews::generateExcerpts(master, { ids }, &error);
+            excerptId = made.empty() ? -1 : made.front();
             if (excerptId < 0) {
                 std::fprintf(stderr, "mscz2media: %s\n", error.toStdString().c_str());
                 return 1;

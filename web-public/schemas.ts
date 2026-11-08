@@ -233,6 +233,11 @@ export interface ScoreMetadata {
     tempo: number;
     /**
      * tempo marker which determines the midi tempo.
+     *
+     * Untrusted, author-controlled rich text: MuseScore's text markup as stored
+     * in the score (`<b>`, `<sym>`, `<font .../>`, and whatever other tags the
+     * author wrote), not a plain string. Escape it, or strip the tags, before
+     * putting it into HTML or XML (issue #43).
      */
     tempoText: string;
 

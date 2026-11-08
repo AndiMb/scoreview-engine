@@ -50,10 +50,12 @@ public:
     //! excerpts in file order (stored ones first, generated ones appended).
     static mu::engraving::Score* score(mu::engraving::MasterScore* master, int excerptId);
 
-    //! Creates one excerpt holding exactly the given parts (by part id) and
-    //! lays it out. Returns its view id, or -1 when a part id is unknown.
-    static int generateExcerpt(mu::engraving::MasterScore* master, const std::vector<std::string>& partIds,
-                               muse::String* error);
+    //! Creates one excerpt per group, each holding exactly the parts of that
+    //! group (by part id), and lays them out. Returns their view ids, in group
+    //! order, or an empty list (and `error`) when a part id is unknown - in
+    //! which case no excerpt is added.
+    static std::vector<int> generateExcerpts(mu::engraving::MasterScore* master,
+                                             const std::vector<std::vector<std::string> >& groups, muse::String* error);
 
     //! Parses {"format":"orig|phone|phonel","concertPitch":bool|null,
     //! "transposeSemitones":n}. Unknown keys are an error, not ignored: a

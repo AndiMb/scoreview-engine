@@ -75,13 +75,19 @@ MAX_RESPONSE = 8 * 1024 * 1024
 # helpers
 
 
+# Headers that carry a credential: GitHub's token, and the NVD key, which NVD
+# takes as an ordinary header named apiKey. urllib's own redirect handling
+# knows neither (issue #39).
+_CREDENTIAL_HEADERS = {"authorization", "apikey"}
+
+
 class _StripAuthOnCrossHostRedirect(urllib.request.HTTPRedirectHandler):
-    """Drop Authorization when a redirect leaves the host it was meant for.
+    """Drop credentials when a redirect leaves the host they were meant for.
 
     urllib carries every header it was given straight to the redirect target.
-    The GitHub API does not redirect across hosts today, and "today" is the
-    entire strength of that guarantee - a token is not something to hand to
-    whoever answers next.
+    Neither the GitHub API nor NVD redirects across hosts today, and "today"
+    is the entire strength of that guarantee - a token or an API key is not
+    something to hand to whoever answers next.
     """
 
     def redirect_request(self, req, fp, code, msg, headers, newurl):
@@ -91,7 +97,7 @@ class _StripAuthOnCrossHostRedirect(urllib.request.HTTPRedirectHandler):
         same_host = urllib.parse.urlparse(req.full_url).netloc == urllib.parse.urlparse(newurl).netloc
         if not same_host:
             for store in (new.headers, new.unredirected_hdrs):
-                for name in [k for k in store if k.lower() == "authorization"]:
+                for name in [k for k in store if k.lower() in _CREDENTIAL_HEADERS]:
                     del store[name]
         return new
 

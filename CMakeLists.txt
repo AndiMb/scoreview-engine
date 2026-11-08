@@ -34,6 +34,12 @@ if(EMSCRIPTEN)
     # library "from the main linker" under emcc — emscripten-ports provides
     # both, but only if the flag is set at compile time for every module.
     add_compile_options("-sUSE_ZLIB=1")
+    # Real C++ exceptions, for every translation unit: without this flag
+    # emscripten turns each throw into abort(), guarded() in web/main.cpp never
+    # catches anything, and every abort leaks stack until the module is dead
+    # (issue #32). It has to be set here, before the submodule's targets are
+    # defined, and again at link time below.
+    add_compile_options("-fwasm-exceptions")
 endif()
 
 set(THIRDPARTY_DIR ${MU_ROOT}/thirdparty)
@@ -138,6 +144,7 @@ set(FONTSTACK_SRC
 )
 
 add_library(sve_engine STATIC
+    src/api/scoreguard.cpp
     src/api/scoreloader.cpp
     src/config/engravinginit.cpp
     src/image/imageformat.cpp
@@ -190,6 +197,7 @@ if(NOT EMSCRIPTEN)
     enable_testing()
     add_executable(sve_tests
         tests/main.cpp
+        src/api/scoreguard.cpp
         src/image/imageformat.cpp
         src/platform/cryptographichash.cpp
     )
@@ -199,7 +207,7 @@ if(NOT EMSCRIPTEN)
         ${MU_ROOT}/src/framework/global
         ${CMAKE_BINARY_DIR}                  # muse_framework_config.h
     )
-    target_link_libraries(sve_tests muse::global)
+    target_link_libraries(sve_tests muse::global z)
     add_test(NAME unit COMMAND sve_tests)
 
     # -DSVE_SANITIZE=ON instruments the test binary and the two sources under
@@ -232,7 +240,12 @@ if(EMSCRIPTEN)
     # submodule tree for wasm; keep the artifacts in the build tree instead.
     set_target_properties(scoreview PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
-    set(WASM_LINK_FLAGS "--no-entry")
+    set(WASM_LINK_FLAGS "--no-entry -fwasm-exceptions")
+    # A stack overflow traps at the next check instead of silently writing
+    # below the stack into static data. The pre-read depth limit
+    # (api/scoreguard.h) is what keeps scores from getting there; this is the
+    # backstop (issue #29).
+    set(WASM_LINK_FLAGS "${WASM_LINK_FLAGS} -s STACK_OVERFLOW_CHECK=1")
     set(WASM_LINK_FLAGS "${WASM_LINK_FLAGS} -s WASM=1")
     set(WASM_LINK_FLAGS "${WASM_LINK_FLAGS} -s DYNAMIC_EXECUTION=0")
     set(WASM_LINK_FLAGS "${WASM_LINK_FLAGS} -s EXPORT_ES6=1 -s MODULARIZE=1")
@@ -250,10 +263,12 @@ if(EMSCRIPTEN)
     # never shrinks back, so in a long-lived process every score raises the
     # floor the next one starts from, and one pathological score would hold
     # that memory for the life of the module. Hitting this limit surfaces as a
-    # failed allocation, which guarded() in web/main.cpp turns into an ordinary
-    # error for the caller -- an out-of-memory abort would take the whole
-    # module down instead. Callers converting untrusted scores back to back
-    # should still give each one its own worker; see web-public/src/worker.js.
+    # failed allocation (std::bad_alloc, now that exceptions are enabled), which
+    # guarded() in web/main.cpp turns into an ordinary error for the caller.
+    # The pre-read checks (api/scoreguard.h) cap what a score can make the zip
+    # reader allocate long before that. Callers converting untrusted scores
+    # back to back should still give each one its own worker; see
+    # web-public/src/worker.js.
     set(WASM_LINK_FLAGS "${WASM_LINK_FLAGS} -s MAXIMUM_MEMORY=2GB")
     set(WASM_LINK_FLAGS "${WASM_LINK_FLAGS} -s EXPORTED_FUNCTIONS='[\"_malloc\", \"_free\"]'")
     set(WASM_LINK_FLAGS "${WASM_LINK_FLAGS} -s EXPORTED_RUNTIME_METHODS='[\"ccall\", \"cwrap\", \"stringToUTF8\", \"UTF8ToString\", \"getValue\", \"setValue\", \"HEAPU8\", \"FS_createDataFile\"]'")

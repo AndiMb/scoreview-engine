@@ -79,8 +79,11 @@ static WasmRes notInited()
 // A C++ exception must not cross the C ABI: nothing on the other side can
 // catch it, so it would take the module down instead of reaching the wrapper,
 // which has a perfectly good error channel. Everything below that runs engine
-// code goes through here. Note this catches exceptions only - a wasm trap
-// (a null dereference, say) is not one, so the guards inside the writers stay
+// code goes through here. This only works because the build compiles and
+// links with -fwasm-exceptions (CMakeLists.txt); without it every throw is an
+// abort() and this catch is dead code (issue #32). Note this catches
+// exceptions only - a wasm trap (a null dereference, say) is not one, so the
+// pre-read checks in api/scoreguard.h and the guards inside the writers stay
 // the first line of defence.
 template<typename Fn>
 static WasmRes guarded(const char* what, Fn&& fn)
@@ -251,10 +254,18 @@ WasmResBytes load(const char* format, const char* data, const uint32_t size, boo
             }
         }
 
-        MasterScore* score = sve::loadScore(io::path_t(path), doLayout);
-        std::remove(path.c_str());
+        // Removed on every way out, an exception included: MEMFS keeps a
+        // forgotten file for the life of the module.
+        struct RemoveOnExit {
+            const std::string& p;
+            ~RemoveOnExit() { std::remove(p.c_str()); }
+        } removeOnExit{ path };
+
+        std::string why;
+        MasterScore* score = sve::loadScore(io::path_t(path), doLayout, &why);
         if (!score) {
-            return WasmRes::error(static_cast<int>(Ret::Code::BadData), u"cannot load score");
+            return WasmRes::error(static_cast<int>(Ret::Code::BadData),
+                                  String(u"cannot load score: %1").arg(String::fromStdString(why)));
         }
 
         s_instances.insert(score);
@@ -426,13 +437,13 @@ WasmResBytes generateExcerpts(uintptr_t score_ptr, const char* partIdsJson)
             }
             groups.push_back(ids);
         }
+        String error;
+        const std::vector<int> ids = sve::ScoreViews::generateExcerpts(score, groups, &error);
+        if (ids.empty()) {
+            return WasmRes::error(static_cast<int>(Ret::Code::UnknownError), error);
+        }
         JsonArray created;
-        for (const auto& ids : groups) {
-            String error;
-            const int id = sve::ScoreViews::generateExcerpt(score, ids, &error);
-            if (id < 0) {
-                return WasmRes::error(static_cast<int>(Ret::Code::UnknownError), error);
-            }
+        for (int id : ids) {
             created.append(id);
         }
         return WasmRes(JsonDocument(created).toJson(JsonDocument::Format::Compact));

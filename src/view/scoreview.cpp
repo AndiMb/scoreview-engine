@@ -1,5 +1,6 @@
 #include "scoreview.h"
 
+#include <algorithm>
 #include <cmath>
 #include <map>
 #include <unordered_map>
@@ -120,10 +121,9 @@ Score* ScoreViews::score(MasterScore* master, int excerptId)
     return excerpts.at(excerptId)->excerptScore();
 }
 
-int ScoreViews::generateExcerpt(MasterScore* master, const std::vector<std::string>& partIds, String* error)
+namespace {
+Excerpt* makeExcerpt(MasterScore* master, const std::vector<std::string>& partIds, String* error)
 {
-    captureBase(master);
-
     std::vector<Part*> parts;
     for (const std::string& id : partIds) {
         Part* found = nullptr;
@@ -135,13 +135,13 @@ int ScoreViews::generateExcerpt(MasterScore* master, const std::vector<std::stri
         }
         if (!found) {
             *error = String(u"unknown part id: %1").arg(String::fromStdString(id));
-            return -1;
+            return nullptr;
         }
         parts.push_back(found);
     }
     if (parts.empty()) {
         *error = u"no parts given";
-        return -1;
+        return nullptr;
     }
 
     // One excerpt for all the given parts - createExcerptsFromParts() would
@@ -163,20 +163,50 @@ int ScoreViews::generateExcerpt(MasterScore* master, const std::vector<std::stri
         }
     }
     excerpt->setTracksMapping(tracks);
+    return excerpt;
+}
+}
 
-    master->startCmd(TranslatableString::untranslatable("scoreview: generate excerpt"));
-    master->initAndAddExcerpt(excerpt, /*fakeUndo*/ false);
-    master->endCmd(false, /*layoutAllParts*/ true);
-    excerpt->excerptScore()->doLayout();
+std::vector<int> ScoreViews::generateExcerpts(MasterScore* master, const std::vector<std::vector<std::string> >& groups,
+                                              String* error)
+{
+    captureBase(master);
 
-    const std::vector<Excerpt*>& all = master->excerpts();
-    for (size_t i = 0; i < all.size(); ++i) {
-        if (all[i] == excerpt) {
-            return static_cast<int>(i);
+    std::vector<Excerpt*> excerpts;
+    for (const auto& ids : groups) {
+        Excerpt* e = makeExcerpt(master, ids, error);
+        if (!e) {
+            for (Excerpt* made : excerpts) {
+                delete made;
+            }
+            return {};
         }
+        excerpts.push_back(e);
     }
-    *error = u"excerpt was not added";
-    return -1;
+
+    // All excerpts in one command, and layoutAllParts false. Each endCmd()
+    // lays out the master score again (and, with true, every excerpt so far),
+    // so one command per excerpt made a call for n parts cost n layouts of a
+    // score with n parts - O(n^2) in a number the author chooses (issue #38).
+    // Adding an excerpt changes none of the others; each is laid out below.
+    master->startCmd(TranslatableString::untranslatable("scoreview: generate excerpts"));
+    for (Excerpt* e : excerpts) {
+        master->initAndAddExcerpt(e, /*fakeUndo*/ false);
+    }
+    master->endCmd(false, /*layoutAllParts*/ false);
+
+    std::vector<int> ids;
+    const std::vector<Excerpt*>& all = master->excerpts();
+    for (Excerpt* e : excerpts) {
+        e->excerptScore()->doLayout();
+        const auto it = std::find(all.begin(), all.end(), e);
+        if (it == all.end()) {
+            *error = u"excerpt was not added";
+            return {};
+        }
+        ids.push_back(static_cast<int>(it - all.begin()));
+    }
+    return ids;
 }
 
 bool ScoreViews::parseOptions(const std::string& json, ViewOptions& out, String* error)

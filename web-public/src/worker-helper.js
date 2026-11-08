@@ -151,6 +151,13 @@ class WebMscoreW {
                 if (data.id !== id) { return }
                 done()
                 if (data.error) {
+                    // The engine in that worker has aborted (helper.js,
+                    // poisonOnTrap): nothing it does from now on can be
+                    // trusted, so the worker goes, and its heap with it.
+                    if (data.error.name === 'EngineAbortedError') {
+                        this.terminated = true
+                        this._terminate()
+                    }
                     reject(new WorkerError(data.error))
                 } else {
                     resolve(data.result)

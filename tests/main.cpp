@@ -24,7 +24,11 @@
 #include <string>
 #include <vector>
 
+#include <zlib.h>
+
 #include "global/types/bytearray.h"
+
+#include "api/scoreguard.h"
 
 #include "image/imageformat.h"
 #include "platform/cryptographichash.h"
@@ -633,6 +637,170 @@ static void testIntervalMap()
     CHECK_EQ("-13 is out of range", sve::intervalIndexFor(-13), -1);
 }
 
+// ---------------------------------------------------------------------------
+// api/scoreguard.cpp — the pre-read checks (issues #29-#40)
+// ---------------------------------------------------------------------------
+
+static bool guardOk(const std::string& xml)
+{
+    return sve::guard::checkBytes("mscx", reinterpret_cast<const uint8_t*>(xml.data()), xml.size()).ok;
+}
+
+static std::string score(const std::string& inner, const std::string& version = "4.60")
+{
+    return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<museScore version=\"" + version + "\">\n<Score>\n"
+           "<Part id=\"1\"><Staff id=\"1\"><StaffType group=\"pitched\"/></Staff>"
+           "<Instrument id=\"flute\">" + inner + "</Instrument></Part>\n"
+           "<Staff id=\"1\"><Measure><voice/></Measure></Staff>\n</Score>\n</museScore>\n";
+}
+
+static std::string nested(const std::string& tag, int depth)
+{
+    std::string s;
+    for (int i = 0; i < depth; ++i) {
+        s += "<" + tag + ">";
+    }
+    for (int i = 0; i < depth; ++i) {
+        s += "</" + tag + ">";
+    }
+    return s;
+}
+
+struct ZipEntry {
+    std::string name;
+    std::string data;
+    bool deflate = true;
+    int64_t declaredSize = -1;      // central-directory uncompressed size, if not the real one
+    int64_t declaredCompressed = -1;
+};
+
+static void put16(std::vector<uint8_t>& v, uint32_t x) { v.push_back(x & 0xff); v.push_back((x >> 8) & 0xff); }
+static void put32(std::vector<uint8_t>& v, uint32_t x) { put16(v, x & 0xffff); put16(v, x >> 16); }
+
+static std::string rawDeflate(const std::string& in)
+{
+    z_stream zs;
+    std::memset(&zs, 0, sizeof(zs));
+    deflateInit2(&zs, 9, Z_DEFLATED, -MAX_WBITS, 8, Z_DEFAULT_STRATEGY);
+    std::string out(deflateBound(&zs, in.size()), '\0');
+    zs.next_in = reinterpret_cast<Bytef*>(const_cast<char*>(in.data()));
+    zs.avail_in = static_cast<uInt>(in.size());
+    zs.next_out = reinterpret_cast<Bytef*>(&out[0]);
+    zs.avail_out = static_cast<uInt>(out.size());
+    deflate(&zs, Z_FINISH);
+    out.resize(zs.total_out);
+    deflateEnd(&zs);
+    return out;
+}
+
+static std::vector<uint8_t> makeZip(const std::vector<ZipEntry>& entries)
+{
+    std::vector<uint8_t> z, cd;
+    for (const ZipEntry& e : entries) {
+        const std::string body = e.deflate ? rawDeflate(e.data) : e.data;
+        const uint32_t crc = crc32(0, reinterpret_cast<const Bytef*>(e.data.data()), static_cast<uInt>(e.data.size()));
+        const uint32_t usize = e.declaredSize >= 0 ? uint32_t(e.declaredSize) : uint32_t(e.data.size());
+        const uint32_t csize = e.declaredCompressed >= 0 ? uint32_t(e.declaredCompressed) : uint32_t(body.size());
+        const uint32_t offset = static_cast<uint32_t>(z.size());
+        put32(z, 0x04034b50); put16(z, 20); put16(z, 0); put16(z, e.deflate ? 8 : 0); put32(z, 0);
+        put32(z, crc); put32(z, csize); put32(z, usize); put16(z, uint32_t(e.name.size())); put16(z, 0);
+        z.insert(z.end(), e.name.begin(), e.name.end());
+        z.insert(z.end(), body.begin(), body.end());
+        put32(cd, 0x02014b50); put16(cd, 20); put16(cd, 20); put16(cd, 0); put16(cd, e.deflate ? 8 : 0); put32(cd, 0);
+        put32(cd, crc); put32(cd, csize); put32(cd, usize); put16(cd, uint32_t(e.name.size())); put16(cd, 0); put16(cd, 0);
+        put16(cd, 0); put16(cd, 0); put32(cd, 0); put32(cd, offset);
+        cd.insert(cd.end(), e.name.begin(), e.name.end());
+    }
+    const uint32_t cdOffset = static_cast<uint32_t>(z.size());
+    z.insert(z.end(), cd.begin(), cd.end());
+    put32(z, 0x06054b50); put16(z, 0); put16(z, 0); put16(z, uint32_t(entries.size())); put16(z, uint32_t(entries.size()));
+    put32(z, uint32_t(cd.size())); put32(z, cdOffset); put16(z, 0);
+    return z;
+}
+
+static sve::guard::Report guardZip(const std::vector<ZipEntry>& entries)
+{
+    const std::vector<uint8_t> z = makeZip(entries);
+    return sve::guard::checkBytes("mscz", z.data(), z.size());
+}
+
+static void testScoreGuard()
+{
+    using namespace sve::guard;
+    group("scoreguard: XML");
+    CHECK_EQ("plain score passes", guardOk(score("")), true);
+    CHECK_EQ("depth at the limit passes", guardOk(score(nested("x", MAX_ELEMENT_DEPTH - 4))), true);
+    CHECK_EQ("depth over the limit fails (#29)", guardOk(score(nested("HBox", MAX_ELEMENT_DEPTH))), false);
+    CHECK_EQ("excerpt <Score> in <Score> passes",
+             guardOk("<museScore version=\"3.02\"><Score><Score></Score></Score></museScore>"), true);
+    CHECK_EQ("<Score> nesting over the limit fails (#29)",
+             guardOk("<museScore version=\"4.60\">" + nested("Score", MAX_SCORE_NESTING + 1) + "</museScore>"), false);
+    CHECK_EQ("clef staff 2 passes", guardOk(score("<clef staff=\"2\">F</clef>")), true);
+    CHECK_EQ("clef staff 0 fails (#30)", guardOk(score("<clef staff=\"0\">F</clef>")), false);
+    CHECK_EQ("concertClef staff -5 fails (#30)", guardOk(score("<concertClef staff=\"-5\">F</concertClef>")), false);
+    CHECK_EQ("transposingClef huge fails (#30)", guardOk(score("<transposingClef staff=\"2000000000\">F</transposingClef>")), false);
+    CHECK_EQ("clef staff as entity fails (#30)", guardOk(score("<clef staff=\"&#48;\">F</clef>")), false);
+    CHECK_EQ("SlurSegment no 1 passes", guardOk(score("<SlurSegment no=\"1\"/>")), true);
+    CHECK_EQ("SlurSegment no huge fails (#31)", guardOk(score("<SlurSegment no=\"100000\"/>")), false);
+    CHECK_EQ("TieSegment no negative fails (#31)", guardOk(score("<TieSegment no=\"-1\"/>")), false);
+    CHECK_EQ("string no is not a segment", guardOk(score("<StringData><string no=\"7\">40</string></StringData>")), true);
+    CHECK_EQ("endRepeat 2 passes", guardOk(score("<endRepeat>2</endRepeat>")), true);
+    CHECK_EQ("endRepeat over the limit fails (#33)", guardOk(score("<endRepeat>101</endRepeat>")), false);
+    CHECK_EQ("endRepeat as CDATA fails (#33)", guardOk(score("<endRepeat><![CDATA[2]]></endRepeat>")), false);
+    std::string manyRepeats;
+    for (int i = 0; i < 41; ++i) {
+        manyRepeats += "<endRepeat>100</endRepeat>";
+    }
+    CHECK_EQ("repeat total over the budget fails (#33)", guardOk(score(manyRepeats)), false);
+    CHECK_EQ("content staff beyond the parts fails (#36)",
+             guardOk(score("").replace(score("").find("<Staff id=\"1\"><Measure>"), 14, "<Staff id=\"2\">")), false);
+    CHECK_EQ("content staff 0 fails (#36)",
+             guardOk(score("").replace(score("").find("<Staff id=\"1\"><Measure>"), 14, "<Staff id=\"0\">")), false);
+    CHECK_EQ("1.x layout without <Score> passes",
+             guardOk("<museScore version=\"1.14\"><Part><Staff/></Part><Staff id=\"1\"><Measure/></Staff></museScore>"), true);
+    CHECK_EQ("1.x staff beyond the parts fails (#36)",
+             guardOk("<museScore version=\"1.14\"><Part><Staff/></Part><Staff id=\"2\"><Measure/></Staff></museScore>"), false);
+    CHECK_EQ("version without a dot fails (#37)", guardOk(score("", "4")), false);
+    CHECK_EQ("version with junk fails (#37)", guardOk(score("", "4.x")), false);
+    CHECK_EQ("DOCTYPE fails", guardOk("<!DOCTYPE x [<!ENTITY a \"b\">]>" + score("")), false);
+    {
+        const std::string xml = score("<Image><path>0123456789abcdef0123456789abcdef.png</path></Image>");
+        Report r = checkBytes("mscx", reinterpret_cast<const uint8_t*>(xml.data()), xml.size());
+        CHECK_EQ("image reference passes the scan", r.ok, true);
+        CHECK_EQ("image reference is reported (#34)", r.imageRefs.size() == 1 && r.imageRefs[0] == "0123456789abcdef0123456789abcdef.png", true);
+        CHECK_EQ("version major is reported (#35)", r.versionMajors.size() == 1 && r.versionMajors[0] == 4, true);
+    }
+    CHECK_EQ("escaped image path fails (#34)", guardOk(score("<Image><path>&#48;123.png</path></Image>")), false);
+
+    group("scoreguard: zip");
+    const std::string mscx = score("");
+    CHECK_EQ("well-formed mscz passes", guardZip({ { "score.mscx", mscx } }).ok, true);
+    CHECK_EQ("stored entry passes", guardZip({ { "score.mscx", mscx, false } }).ok, true);
+    CHECK_EQ("bad XML inside the zip fails", guardZip({ { "score.mscx", score("<clef staff=\"0\"/>") } }).ok, false);
+    CHECK_EQ("XML in an excerpt file is checked too",
+             guardZip({ { "score.mscx", mscx }, { "Excerpts/a/a.mscx", score("<clef staff=\"0\"/>") } }).ok, false);
+    CHECK_EQ("entry inflating beyond its header fails (#40)",
+             guardZip({ { "score.mscx", std::string(100000, ' '), true, 1000 } }).ok, false);
+    CHECK_EQ("entry inflating short of its header fails (#40)",
+             guardZip({ { "score.mscx", std::string(1000, ' '), true, 100000 } }).ok, false);
+    CHECK_EQ("entry declared over the size cap fails (#40)",
+             guardZip({ { "score.mscx", mscx, true, int64_t(MAX_ENTRY_SIZE) + 1 } }).ok, false);
+    CHECK_EQ("entry declared negative for an int fails (#40)",
+             guardZip({ { "score.mscx", mscx, true, 0x80000000LL } }).ok, false);
+    CHECK_EQ("compressed size beyond the file fails (#40)",
+             guardZip({ { "score.mscx", mscx, true, -1, 1 << 20 } }).ok, false);
+    {
+        const std::vector<uint8_t> z = makeZip({ { "score.mscx", mscx } });
+        CHECK_EQ("truncated zip fails", checkBytes("mscz", z.data(), z.size() - 30).ok, false);
+        CHECK_EQ("not a zip fails", checkBytes("mscz", reinterpret_cast<const uint8_t*>(mscx.data()), mscx.size()).ok, false);
+    }
+    {
+        Report r = guardZip({ { "score.mscx", mscx }, { "Pictures/x.png", "abc" } });
+        CHECK_EQ("picture hash is the MD4 of its bytes (#34)",
+                 r.pictureHashes.size() == 1 && r.pictureHashes[0] == "a448017aaf21d8525fc10ae87aa6729d", true);
+    }
+}
+
 int main()
 {
     std::printf("scoreview-engine unit tests\n");
@@ -644,6 +812,7 @@ int main()
     testXmlEscape();
     testBase64();
     testIntervalMap();
+    testScoreGuard();
 
     std::printf("\n%d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;

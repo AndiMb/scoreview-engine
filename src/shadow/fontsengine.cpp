@@ -589,24 +589,27 @@ std::vector<FontsEngine::TextBlock> FontsEngine::splitTextByLines(const std::u32
 {
     std::vector<TextBlock> lines;
 
+    // shadow diff: upstream counted the '\n' into the following line (so every
+    // line after the first ran one character long - over the next '\n', or
+    // over the string's terminator for the last line) and, for text ending in
+    // '\n', emitted a {nullptr, 1} block that every caller dereferences
+    // (issue #41). Here a '\n' ends its line and belongs to none; an empty
+    // line is a zero-length block at its own position.
     TextBlock l;
     for (size_t i = 0; i < text.size(); ++i) {
         if (!l.text) {
             l.text = &text[i];
         }
-
         if (text.at(i) == U'\n') {
             lines.push_back(l);
             l.text = nullptr;
             l.lenght = 0;
+            continue;
         }
         ++l.lenght;
-
-        if (i == (text.size() - 1)) {
-            lines.push_back(l);
-            l.text = nullptr;
-            l.lenght = 0;
-        }
+    }
+    if (l.text) {
+        lines.push_back(l);
     }
 
     return lines;
