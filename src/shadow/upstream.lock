@@ -24,4 +24,4 @@ d0feee4eb448b2a4e875b75d49f93072f52fc4a3  src/engraving/data/styles/legacy-style
 9ac11c773011534eaf05abb0102177b50d5f2490  src/engraving/data/chords/chords_legacy.xml               resources/engraving/styles/chords_legacy.xml
 7e367b0d3aa0fba5565f0f8c6cf1a29757c36965  src/engraving/data/chords/stdchords.xml                   resources/engraving/styles/stdchords.xml
 922ac0064838c6d580c61e44adb4a19b81715aab  src/engraving/data/chords/chords_std.xml                  resources/engraving/styles/chords_std.xml
-9f75a790dd59286d0d6a9b44f46b4312db723fd9  share/instruments/instruments.xml                         resources/engraving/instruments/instruments.xml
+2a786e91b487a40f86784a6127e6574b250639d0  share/instruments/instruments.xml                         resources/engraving/instruments/instruments.xml
