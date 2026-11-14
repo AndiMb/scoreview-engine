@@ -22,7 +22,7 @@ Toolchain and CI:
 
 | | In use | Where |
 |---|---|---|
-| emsdk / Emscripten | 6.0.13 | `build.yml`, `tools/build-wasm-docker.sh` — tag and image digest |
+| emsdk / Emscripten | 7.0.0 | `build.yml`, `tools/build-wasm-docker.sh` — tag and image digest |
 | Ubuntu | 24.04 | `build.yml`, `Dockerfile` |
 | g++ | 10 | `Dockerfile` |
 | Node | 26 (supported to 2029-04-30) | `build.yml`; package declares `engines: >=18` |
@@ -168,7 +168,21 @@ layer (CVE-2026-85091 in `gzwrite`), minizip and `contrib/infback9`. minizip is
 not linked. The entry silences 1.4 only: 1.4.1 is a finding again, and once the
 port reaches 1.4 the entry is stale and `--verify` asks for its removal.
 
-**emsdk** — 6.0.13 since 2026-10-30. Four patch releases in one step, and
+**emsdk** — 7.0.0 since 2026-11-14 (#45). A major, and two items in its
+changelog reach this build. libc++, libc++abi and compiler-rt moved to LLVM
+23.1.3, whose libc++ drops many transitive header includes; MuseScore 4.7.7
+relies on them (the first error was `kors_logger` using `std::shared_ptr`
+without `<memory>`), so the top-level `CMakeLists.txt` defines
+`_LIBCPP_KEEP_TRANSITIVE_INCLUDES_LLVM23` for the wasm build — libc++'s own
+stopgap, to go once upstream adds the includes. And the default browser
+minimums rose: Chrome 85 → 93, Firefox 79 → 92, Safari 15.0 → 15.4. The rest
+(`EMCC_ONLY_FORCED_STDLIBS`, `libemcc` for `-nostdlib`, pipe capacity, WasmFS
+OPFS, side modules) is nothing this build uses. The zlib port stayed 1.3.2
+with the same hash. The wasm gate fired the same eleven waivers on the same
+eleven scores with byte counts identical to the 4.7.7 release run on 6.0.13
+— a new compiler and libc++, and the float noise did not move.
+
+6.0.13 came on 2026-10-30. Four patch releases in one step, and
 none of them reached this build: 6.0.11 and 6.0.13 removed `FS.findObject`
 and `FS.filesystems` (and deprecated `FS.analyzePath`), which nothing here
 calls; the rest is embind, SDL3, MEMORY64, wasm2js and launcher work. The
