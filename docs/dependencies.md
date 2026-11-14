@@ -149,7 +149,21 @@ port ships, today 1.3.2 (the release carrying the 7ASecurity audit fixes); the
 native CLI links the distro package and gets distro security updates. The only
 route to a newer zlib is an emsdk bump.
 
-**emsdk** — 6.0.13 since 2026-10-30. Four patch releases in one step, and
+**emsdk** — 7.0.0 since 2026-11-14 (#45). A major, and two items in its
+changelog reach this build. libc++, libc++abi and compiler-rt moved to LLVM
+23.1.3, whose libc++ drops many transitive header includes; MuseScore 4.7.7
+relies on them (the first error was `kors_logger` using `std::shared_ptr`
+without `<memory>`), so the top-level `CMakeLists.txt` defines
+`_LIBCPP_KEEP_TRANSITIVE_INCLUDES_LLVM23` for the wasm build — libc++'s own
+stopgap, to go once upstream adds the includes. And the default browser
+minimums rose: Chrome 85 → 93, Firefox 79 → 92, Safari 15.0 → 15.4. The rest
+(`EMCC_ONLY_FORCED_STDLIBS`, `libemcc` for `-nostdlib`, pipe capacity, WasmFS
+OPFS, side modules) is nothing this build uses. The zlib port stayed 1.3.2
+with the same hash. The wasm gate fired the same eleven waivers on the same
+eleven scores with byte counts identical to the 4.7.7 release run on 6.0.13
+— a new compiler and libc++, and the float noise did not move.
+
+6.0.13 came on 2026-10-30. Four patch releases in one step, and
 none of them reached this build: 6.0.11 and 6.0.13 removed `FS.findObject`
 and `FS.filesystems` (and deprecated `FS.analyzePath`), which nothing here
 calls; the rest is embind, SDL3, MEMORY64, wasm2js and launcher work. The
