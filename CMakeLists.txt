@@ -40,6 +40,12 @@ if(EMSCRIPTEN)
     # (issue #32). It has to be set here, before the submodule's targets are
     # defined, and again at link time below.
     add_compile_options("-fwasm-exceptions")
+    # emsdk 7 ships libc++ 23, which drops many transitive header includes.
+    # MuseScore 4.7.7 relies on them (kors_logger uses std::shared_ptr without
+    # <memory>, among others), and the sources are upstream's, not ours. This
+    # is libc++'s own documented stopgap; it goes once upstream adds the
+    # missing includes.
+    add_compile_definitions(_LIBCPP_KEEP_TRANSITIVE_INCLUDES_LLVM23)
 endif()
 
 set(THIRDPARTY_DIR ${MU_ROOT}/thirdparty)
