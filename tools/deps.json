@@ -119,6 +119,9 @@
       "cpe": "cpe:2.3:a:zlib:zlib",
       "purl": "pkg:generic/zlib",
       "security_critical": true,
+      "upstream_acknowledged": {
+        "1.4": "Not takeable: the wasm links the emscripten port, and both emsdk 6.0.13 and 7.0.0 name 1.3.2 with the same hash in tools/ports/zlib.py; the native CLI links the distro zlib. Not reachable either: the engine calls only inflateInit2/inflate/inflateEnd and deflateInit2/deflate/deflateEnd (src/api/scoreguard.cpp, musescore/.../serialization/internal/zipcontainer.cpp). Every 1.4 security fix is elsewhere: inflateGetDictionary, inflateSync, inflatePrime, inflateBack, deflatePrime, deflateResetKeep, gzwrite (CVE-2026-85091), gzseek, gzdopen, minizip, contrib/infback9 - none called, minizip not linked. Re-check when the emsdk port moves."
+      },
       "note": "Reads the mscz container. Version is whatever the pinned emsdk ships, so the only way to move it is an emsdk bump. The native CLI links the distro zlib instead, which gets distro security updates."
     },
     {

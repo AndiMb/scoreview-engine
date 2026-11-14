@@ -27,6 +27,14 @@ Two jobs, deliberately separate:
                 inapplicable finding that reappears every week trains everyone
                 to stop reading the report.
 
+                The same holds for --updates: upstream_acknowledged lists an
+                upstream version that was triaged and cannot or need not be
+                taken yet (zlib 1.4 while the emsdk port is still 1.3.2), with
+                the reason. It silences exactly that version; the next release
+                is a finding again. An entry the declared version has caught
+                up with is stale and is itself a finding — --verify reports it
+                offline, so it cannot outlive the bump that made it moot.
+
 Two switches cut across both jobs. --only NAME restricts the run to named
 components, and --json replaces the report with the same findings as data.
 Both exist for tools/bump-musescore.py, which must not parse prose to learn
@@ -148,6 +156,17 @@ def parse_version(v):
 
 def newer(candidate, current):
     return parse_version(candidate) > parse_version(current)
+
+
+def stale_upstream_acks(c):
+    """upstream_acknowledged entries the declared version has caught up with.
+
+    Such an entry silences nothing any more, and left in place it would
+    silence that version again after a downgrade. Same rule as a corpus
+    waiver that stops firing: remove it.
+    """
+    return [v for v in c.get("upstream_acknowledged", {})
+            if not newer(v, c["version"])]
 
 
 def run(cmd, cwd=None):
@@ -509,6 +528,10 @@ def main():
                 problems.append(f"{c['name']}: manifest says {c['version']}, tree says {found} ({detail})")
             # "declared" is the wrong word for a tracked entry, and the mark
             # in the last column is what says so.
+            for v in stale_upstream_acks(c):
+                problems.append(
+                    f"{c['name']}: upstream_acknowledged lists {v}, but "
+                    f"{c['version']} is in use — remove the stale entry")
             declared = "(tree)" if tracked else c["version"]
             if args.markdown:
                 out(f"| `{c['name']}` | {declared} | {found or '-'} | {mark} |")
@@ -532,14 +555,17 @@ def main():
             if ans["kind"] == "version":
                 latest = ans["latest"]
                 behind = newer(latest, c["version"])
+                acked = behind and latest in c.get("upstream_acknowledged", {})
                 mark = "BEHIND" if behind else "current"
-                if behind:
+                if acked:
+                    mark = "BEHIND (acknowledged)"
+                elif behind:
                     sec = " [security-critical]" if c.get("security_critical") else ""
                     problems.append(f"{c['name']}: {c['version']} -> {latest} available{sec}")
                 right = latest
                 records[c["name"]].update(
                     kind="version", latest=latest, behind=behind,
-                    source=ans.get("source"))
+                    acknowledged=acked, source=ans.get("source"))
 
             elif ans["kind"] == "eol":
                 days = ans["days"]
