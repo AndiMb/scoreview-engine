@@ -22,7 +22,7 @@ Toolchain and CI:
 
 | | In use | Where |
 |---|---|---|
-| emsdk / Emscripten | 6.0.13 | `build.yml`, `tools/build-wasm-docker.sh` — tag and image digest |
+| emsdk / Emscripten | 7.0.0 | `build.yml`, `tools/build-wasm-docker.sh` — tag and image digest |
 | Ubuntu | 24.04 | `build.yml`, `Dockerfile` |
 | g++ | 10 | `Dockerfile` |
 | Node | 26 (supported to 2029-04-30) | `build.yml`; package declares `engines: >=18` |
