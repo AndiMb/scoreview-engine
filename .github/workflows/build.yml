@@ -166,7 +166,7 @@ jobs:
           # dependency of the build that was pinned by name rather than by
           # content. It is the multi-arch index digest, as `docker buildx
           # imagetools inspect emscripten/emsdk:<version>` prints it.
-          docker run --rm -v "$WORKSPACE:/src" emscripten/emsdk:6.0.13@sha256:fb7864e398acfda863dfcea78b8bc8adad359fa60c6a0bbeb845931de64aa68a bash -c '
+          docker run --rm -v "$WORKSPACE:/src" emscripten/emsdk:7.0.0@sha256:6bd7aef93408b10bf7b36642cb7c91119b302f720b9ec2d20439f73cf07fe894 bash -c '
             set -e
             emcmake cmake -S /src -B /src/build-wasm -DCMAKE_BUILD_TYPE=Release
             cmake --build /src/build-wasm --target scoreview -- -j "$(nproc)"
