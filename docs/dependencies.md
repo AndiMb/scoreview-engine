@@ -93,6 +93,12 @@ not built) and CVE-2026-27171 (`crc32_combine64`, not called). NVD reports
 nothing against 1.3.2, so both were removed rather than carried forward, which
 is the rule working as intended.
 
+`upstream_acknowledged` is the same idea for `--updates`: an upstream release
+that was triaged and cannot or need not be taken yet, with the reason. It
+silences exactly that version, and an entry the declared version has caught up
+with fails `--verify` until it is removed. Today it holds one entry, zlib 1.4
+(see the zlib notes below).
+
 ## What runs when
 
 * **Every build** (`build.yml`, native job): `check-deps.py --verify`. Offline,
@@ -148,6 +154,19 @@ changes, and the native corpus fingerprint is unchanged by it.
 port ships, today 1.3.2 (the release carrying the 7ASecurity audit fixes); the
 native CLI links the distro package and gets distro security updates. The only
 route to a newer zlib is an emsdk bump.
+
+zlib 1.4 (2026-11-04) is acknowledged in `deps.json` under
+`upstream_acknowledged` rather than taken, for two reasons (#45). It is not
+takeable: emsdk 7.0.0 still names 1.3.2 with the same hash in
+`tools/ports/zlib.py`, so not even the next emsdk major moves it. And it is not
+reachable: the engine calls `inflateInit2`/`inflate`/`inflateEnd` and
+`deflateInit2`/`deflate`/`deflateEnd` and nothing else
+(`src/api/scoreguard.cpp`, MuseScore's `zipcontainer.cpp`), while every 1.4
+security fix sits elsewhere — `inflateGetDictionary`, `inflateSync`,
+`inflatePrime`, `inflateBack`, `deflatePrime`, `deflateResetKeep`, the `gz*`
+layer (CVE-2026-85091 in `gzwrite`), minizip and `contrib/infback9`. minizip is
+not linked. The entry silences 1.4 only: 1.4.1 is a finding again, and once the
+port reaches 1.4 the entry is stale and `--verify` asks for its removal.
 
 **emsdk** — 6.0.13 since 2026-10-30. Four patch releases in one step, and
 none of them reached this build: 6.0.11 and 6.0.13 removed `FS.findObject`
